@@ -27,6 +27,7 @@
             pythonPackages.requests
             pythonPackages.numpy
             pythonPackages.setuptools
+            pythonPackages.mcp
           ];
 
           # Disable tests if they require remote services or complex setup

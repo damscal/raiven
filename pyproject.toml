@@ -10,7 +10,15 @@ dependencies = [
     "neo4j",
     "requests",
     "numpy",
+    "mcp[fastmcp]",
 ]
 
 [project.scripts]
 raiven = "raiven:main"
+raiven-mcp = "raiven_mcp:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]

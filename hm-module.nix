@@ -4,7 +4,6 @@ with lib;
 
 let
   cfg = config.services.raiven;
-  # Helper to handle potential path types in environment variables
   toEnvValue = v: if isPath v then toString v else v;
 in {
   options.services.raiven = {
@@ -20,7 +19,12 @@ in {
         uri = mkOption {
           type = types.str;
           default = "";
-          description = "Neo4j URI.";
+          description = "Base Neo4j URI (Browser/Root).";
+        };
+        apiUrl = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Explicit Neo4j REST API URI. If null, derived from uri.";
         };
         user = mkOption {
           type = types.str;
@@ -87,6 +91,7 @@ in {
           "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
           "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}"
         ] 
+        ++ (optional (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}")
         ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}")
         ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}")
         ++ (optional (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}");
