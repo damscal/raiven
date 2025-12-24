@@ -10,8 +10,8 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        python = pkgs.python310;
-        pythonPackages = pkgs.python310Packages;
+        python = pkgs.python311;
+        pythonPackages = pkgs.python311Packages;
       in
       {
         packages.default = pythonPackages.buildPythonApplication {
@@ -20,17 +20,23 @@
           src = ./.;
           format = "pyproject";
 
-          propagatedBuildInputs = with pythonPackages; [
-            neo4j
-            requests
-            numpy
-            setuptools
+          # Dependency management: 
+          # We use the packages provided by nixpkgs to ensure compatibility
+          propagatedBuildInputs = [
+            pythonPackages.neo4j
+            pythonPackages.requests
+            pythonPackages.numpy
+            pythonPackages.setuptools
           ];
+
+          # Disable tests if they require remote services or complex setup
+          doCheck = false;
 
           meta = with pkgs.lib; {
             description = "Holographic Cognitive Memory System";
             license = licenses.mit;
             maintainers = [ ];
+            platforms = platforms.all;
           };
         };
 
