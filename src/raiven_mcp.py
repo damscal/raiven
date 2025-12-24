@@ -104,6 +104,8 @@ def switch_memory_profile(profile_name: str) -> str:
         logger.exception("Error in switch_memory_profile tool")
         return f"Error switching profile: {str(e)}"
 
+""" 
+DISABLED BECAUSE THEY NEED NEO4J ENTERPRISE. NEO4J COMMUNITY --> ONLY 1 DATABASE
 @mcp.tool()
 def create_memory_profile(profile_name: str) -> str:
     """
@@ -131,7 +133,8 @@ def remove_memory_profile(profile_name: str) -> str:
         return f"Successfully removed memory profile: {profile_name}"
     except Exception as e:
         logger.exception("Error in remove_memory_profile tool")
-        return f"Error removing profile: {str(e)}"
+        return f"Error removing profile: {str(e)}" 
+"""
 
 def main():
     # FastMCP automatically handles stdio transport

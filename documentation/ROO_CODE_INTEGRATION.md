@@ -50,6 +50,8 @@ Switch to a different memory database to keep contexts separate.
 *   **Input:** `profile_name` (Name of the database).
 *   **Example Prompt:** *"Switch to the 'raiventest' memory profile."*
 
+<!-- 
+Disabled because they need Neo4j enterprise
 ### `create_memory_profile`
 Create a new isolated memory profile.
 *   **Input:** `profile_name`.
@@ -58,7 +60,7 @@ Create a new isolated memory profile.
 ### `remove_memory_profile`
 Permanently delete an existing memory profile.
 *   **Input:** `profile_name`.
-*   **Example Prompt:** *"Remove the 'raiventest' profile."*
+*   **Example Prompt:** *"Remove the 'raiventest' profile."* -->
 
 ## 3. Benefits of Docker Integration
 
