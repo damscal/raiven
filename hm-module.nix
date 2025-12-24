@@ -4,6 +4,8 @@ with lib;
 
 let
   cfg = config.services.raiven;
+  # Helper to handle potential path types in environment variables
+  toEnvValue = v: if isPath v then toString v else v;
 in {
   options.services.raiven = {
     enable = mkEnableOption "RAIVEN Holographic Cognitive Memory System";
@@ -26,12 +28,12 @@ in {
           description = "Neo4j Username.";
         };
         passwordFile = mkOption {
-          type = types.nullOr types.str;
+          type = types.nullOr (types.either types.str types.path);
           default = null;
           description = "Path to file containing Neo4j Password.";
         };
         apiKeyFile = mkOption {
-          type = types.nullOr types.str;
+          type = types.nullOr (types.either types.str types.path);
           default = null;
           description = "Path to file containing Neo4j API Key.";
         };
@@ -44,7 +46,7 @@ in {
           description = "Ollama Host URI.";
         };
         apiKeyFile = mkOption {
-          type = types.nullOr types.str;
+          type = types.nullOr (types.either types.str types.path);
           default = null;
           description = "Path to file containing Ollama API Key.";
         };
@@ -85,9 +87,9 @@ in {
           "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
           "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}"
         ] 
-        ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${cfg.config.neo4j.passwordFile}")
-        ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${cfg.config.neo4j.apiKeyFile}")
-        ++ (optional (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${cfg.config.ollama.apiKeyFile}");
+        ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}")
+        ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}")
+        ++ (optional (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}");
       };
 
       Install = {
