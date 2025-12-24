@@ -13,51 +13,54 @@ in {
       description = "The RAIVEN package to use.";
     };
 
-    neo4j = {
-      uri = mkOption {
-        type = types.str;
-        default = "https://server1os1.oneira.pp.ua/neo4j/";
-        description = "Neo4j URI.";
+    config = {
+      neo4j = {
+        uri = mkOption {
+          type = types.str;
+          default = "";
+          description = "Neo4j URI.";
+        };
+        user = mkOption {
+          type = types.str;
+          default = "neo4j";
+          description = "Neo4j Username.";
+        };
+        passwordFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Path to file containing Neo4j Password.";
+        };
+        apiKeyFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Path to file containing Neo4j API Key.";
+        };
       };
-      user = mkOption {
-        type = types.str;
-        default = "neo4j";
-        description = "Neo4j Username.";
-      };
-      passwordFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Path to file containing Neo4j Password.";
-      };
-      apiKeyFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Path to file containing Neo4j API Key.";
-      };
-    };
 
-    ollama = {
-      host = mkOption {
-        type = types.str;
-        default = "https://server1os1.oneira.pp.ua/ollama/";
-        description = "Ollama Host URI.";
+      ollama = {
+        host = mkOption {
+          type = types.str;
+          default = "";
+          description = "Ollama Host URI.";
+        };
+        apiKeyFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Path to file containing Ollama API Key.";
+        };
+        model = {
+          name = mkOption {
+            type = types.str;
+            default = "embeddinggemma:latest";
+            description = "Ollama embedding model name.";
+          };
+          vectorDimensions = mkOption {
+            type = types.int;
+            default = 768;
+            description = "Vector dimensions for the embedding model.";
+          };
+        };
       };
-      apiKeyFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Path to file containing Ollama API Key.";
-      };
-      model = mkOption {
-        type = types.str;
-        default = "embeddinggemma:latest";
-        description = "Ollama embedding model.";
-      };
-    };
-
-    vectorDimensions = mkOption {
-      type = types.int;
-      default = 768;
-      description = "Vector dimensions for the embedding model.";
     };
   };
 
@@ -76,15 +79,15 @@ in {
         WorkingDirectory = "${config.home.homeDirectory}";
         Environment = [
           "PYTHONUNBUFFERED=1"
-          "RAIVEN_NEO4J_URI=${cfg.neo4j.uri}"
-          "RAIVEN_NEO4J_USER=${cfg.neo4j.user}"
-          "RAIVEN_OLLAMA_HOST=${cfg.ollama.host}"
-          "RAIVEN_OLLAMA_MODEL=${cfg.ollama.model}"
-          "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.vectorDimensions}"
+          "RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}"
+          "RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}"
+          "RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}"
+          "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
+          "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}"
         ] 
-        ++ (optional (cfg.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${cfg.neo4j.passwordFile}")
-        ++ (optional (cfg.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${cfg.neo4j.apiKeyFile}")
-        ++ (optional (cfg.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${cfg.ollama.apiKeyFile}");
+        ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${cfg.config.neo4j.passwordFile}")
+        ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${cfg.config.neo4j.apiKeyFile}")
+        ++ (optional (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${cfg.config.ollama.apiKeyFile}");
       };
 
       Install = {
