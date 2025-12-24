@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raiven"
+version = "0.1.0"
+description = "Holographic Cognitive Memory System"
+dependencies = [
+    "neo4j",
+    "requests",
+    "numpy",
+]
+
+[project.scripts]
+raiven = "raiven:main"

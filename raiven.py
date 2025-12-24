@@ -1,22 +1,49 @@
 import os
 import uuid
+import json
+import requests
 import numpy as np
 from typing import List, Dict, Any
 from datetime import datetime
 from neo4j import GraphDatabase
-from sentence_transformers import SentenceTransformer
 
-# --- Configuration ---
-# In a real app, load these from .env
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "password" 
+# --- Configuration Loader ---
+def get_config(key: str, default: Any = None) -> Any:
+    return os.getenv(key, default)
+
+def read_secret(file_path: str) -> str:
+    if not file_path:
+        return ""
+    full_path = os.path.expanduser(file_path)
+    if os.path.isfile(full_path):
+        try:
+            with open(full_path, "r") as f:
+                return f.read().strip()
+        except Exception as e:
+            print(f"Warning: Could not read secret file at {full_path}: {e}")
+    return ""
+
+# Configuration from environment variables (set by Home Manager service)
+NEO4J_URI = get_config("RAIVEN_NEO4J_URI", "https://server1os1.oneira.pp.ua/neo4j/")
+NEO4J_USER = get_config("RAIVEN_NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = read_secret(get_config("RAIVEN_NEO4J_PASSWORD_FILE"))
+NEO4J_API_KEY = read_secret(get_config("RAIVEN_NEO4J_API_KEY_FILE"))
+
+OLLAMA_HOST = get_config("RAIVEN_OLLAMA_HOST", "https://server1os1.oneira.pp.ua/ollama/")
+OLLAMA_API_KEY = read_secret(get_config("RAIVEN_OLLAMA_API_KEY_FILE"))
+EMBEDDING_MODEL = get_config("RAIVEN_OLLAMA_MODEL", "embeddinggemma:latest")
+VECTOR_DIMENSIONS = int(get_config("RAIVEN_VECTOR_DIMENSIONS", "768"))
 
 class CognitiveMemory:
     def __init__(self):
-        self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-        # Using a lightweight local model for embeddings (384 dimensions)
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        # Neo4j 5.x connection
+        if NEO4J_API_KEY:
+            from neo4j import Auth
+            auth = Auth.api_key(NEO4J_API_KEY)
+        else:
+            auth = (NEO4J_USER, NEO4J_PASSWORD)
+
+        self.driver = GraphDatabase.driver(NEO4J_URI, auth=auth)
         self._initialize_schema()
 
     def close(self):
@@ -32,59 +59,65 @@ class CognitiveMemory:
                 CREATE VECTOR INDEX chunk_embeddings IF NOT EXISTS
                 FOR (c:Chunk) ON (c.embedding)
                 OPTIONS {indexConfig: {
-                 `vector.dimensions`: 384,
+                 `vector.dimensions`: $dims,
                  `vector.similarity_function`: 'cosine'
                 }}
-            """)
+            """, dims=VECTOR_DIMENSIONS)
             
             # 2. Vector Index for RAPTOR Summaries
             session.run("""
                 CREATE VECTOR INDEX summary_embeddings IF NOT EXISTS
                 FOR (s:Summary) ON (s.embedding)
                 OPTIONS {indexConfig: {
-                 `vector.dimensions`: 384,
+                 `vector.dimensions`: $dims,
                  `vector.similarity_function`: 'cosine'
                 }}
-            """)
+            """, dims=VECTOR_DIMENSIONS)
 
             # 3. Constraint for Entities to ensure uniqueness
             session.run("""
                 CREATE CONSTRAINT entity_id IF NOT EXISTS 
                 FOR (e:Entity) REQUIRE e.name IS UNIQUE
             """)
-            print(">> Schema & Indexes Initialized")
+            print(f">> Schema & Indexes Initialized (Dimensions: {VECTOR_DIMENSIONS})")
 
     def _embed(self, text: str) -> List[float]:
-        return self.encoder.encode(text).tolist()
+        """
+        Calls Ollama API for embeddings.
+        """
+        url = f"{OLLAMA_HOST.rstrip('/')}/api/embeddings"
+        headers = {"Authorization": f"Bearer {OLLAMA_API_KEY}"} if OLLAMA_API_KEY else {}
+        payload = {
+            "model": EMBEDDING_MODEL,
+            "prompt": text
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()["embedding"]
+        except Exception as e:
+            print(f"Error calling Ollama: {e}")
+            raise
 
     # =========================================================
     # PART 1: INGESTION (Episodic + Semantic Extraction)
     # =========================================================
     
     def add_memory(self, text: str, role: str = "user"):
-        """
-        Ingests interaction, creates a Chunk, and simulates Entity Extraction.
-        In production, 'entities' would come from an LLM call.
-        """
         embedding = self._embed(text)
         chunk_id = str(uuid.uuid4())
-        
-        # Simulated LLM Entity Extraction (You would replace this with an LLM call)
-        # e.g., "I use Neo4j" -> Extract: "Neo4j"
-        extracted_entities = [word for word in text.split() if word[0].isupper()] 
+        extracted_entities = [word.strip(".,!?") for word in text.split() if word[0].isupper() and len(word) > 1] 
 
         with self.driver.session() as session:
             session.execute_write(
                 self._create_memory_transaction, 
                 text, embedding, role, chunk_id, extracted_entities
             )
-        
-        # Trigger RAPTOR abstraction (Simplified)
         self._update_raptor_tree()
 
     @staticmethod
     def _create_memory_transaction(tx, text, embedding, role, chunk_id, entities):
-        # 1. Create the Episodic Chunk
         query_chunk = """
         CREATE (c:Chunk {
             id: $id, 
@@ -96,8 +129,6 @@ class CognitiveMemory:
         """
         tx.run(query_chunk, id=chunk_id, text=text, role=role, embedding=embedding)
 
-        # 2. Link Entities (The Semantic Graph)
-        # We merge entities so we don't duplicate "Python" if it exists.
         for entity in entities:
             query_entity = """
             MATCH (c:Chunk {id: $chunk_id})
@@ -106,8 +137,6 @@ class CognitiveMemory:
             """
             tx.run(query_entity, chunk_id=chunk_id, entity=entity)
             
-            # 3. (Optional) Auto-connect entities found in same chunk
-            # This builds the knowledge graph web implicitly
             query_rel = """
             MATCH (c:Chunk {id: $chunk_id})-[:MENTIONS]->(e1:Entity)
             MATCH (c)-[:MENTIONS]->(e2:Entity)
@@ -123,12 +152,7 @@ class CognitiveMemory:
     # =========================================================
 
     def _update_raptor_tree(self):
-        """
-        Simplistic implementation of RAPTOR.
-        Groups orphan chunks, summarizes them, and layers them up.
-        """
         with self.driver.session() as session:
-            # Find recent chunks that are NOT summarized yet
             result = session.run("""
                 MATCH (c:Chunk)
                 WHERE NOT (c)<-[:SUMMARIZES]-(:Summary)
@@ -137,28 +161,26 @@ class CognitiveMemory:
             """)
             
             chunks = list(result)
-            if len(chunks) < 3: return # Wait for more data to summarize
+            if len(chunks) < 3: return
 
-            # Combine text (In real life, LLM generates a summary here)
             combined_text = " ".join([c['text'] for c in chunks])
-            summary_text = f"SUMMARY OF {len(chunks)} ITEMS: {combined_text[:50]}..."
+            summary_text = f"Composite Memory: {combined_text[:100]}..."
             summary_vec = self._embed(summary_text)
             summary_id = str(uuid.uuid4())
 
-            # Write Summary node and link to children
             session.run("""
                 CREATE (s:Summary {
                     id: $sid, 
                     text: $stext, 
                     embedding: $svec, 
-                    level: 1
+                    level: 1,
+                    timestamp: datetime()
                 })
                 WITH s
                 UNWIND $child_ids as cid
                 MATCH (c:Chunk {id: cid})
                 MERGE (s)-[:SUMMARIZES]->(c)
             """, sid=summary_id, stext=summary_text, svec=summary_vec, child_ids=[c['id'] for c in chunks])
-            
             print(f">> RAPTOR: Created Level 1 Summary for {len(chunks)} chunks.")
 
     # =========================================================
@@ -167,29 +189,21 @@ class CognitiveMemory:
 
     def retrieve(self, query: str, top_k: int = 3):
         query_vec = self._embed(query)
-        
         with self.driver.session() as session:
-            # Strategy A: Low-level Episodic Search (Vector)
-            # Using Neo4j 5.x db.index.vector.queryNodes
             episodic_result = session.run("""
                 CALL db.index.vector.queryNodes('chunk_embeddings', $k, $vec)
                 YIELD node, score
                 RETURN node.text as text, score
             """, k=top_k, vec=query_vec)
             
-            # Strategy B: High-level Abstract Search (RAPTOR)
             raptor_result = session.run("""
                 CALL db.index.vector.queryNodes('summary_embeddings', 2, $vec)
                 YIELD node, score
                 RETURN node.text as text, score
             """, vec=query_vec)
 
-            # Strategy C: Graph Traversal (Knowledge Graph)
-            # Find entities in query, then find what they are related to
-            # (Simple keyword match for demo, use NER in prod)
-            keywords = [w for w in query.split() if w[0].isupper()]
+            keywords = [w.strip(".,!?") for w in query.split() if w[0].isupper() and len(w) > 1]
             graph_context = []
-            
             if keywords:
                 res = session.run("""
                     MATCH (e:Entity)
@@ -206,25 +220,21 @@ class CognitiveMemory:
                 "knowledge_graph": graph_context
             }
 
-# --- USAGE DEMO ---
-if __name__ == "__main__":
+def main():
     brain = CognitiveMemory()
-    
-    # 1. Feed it data (Episodic Stream)
-    print("--- Ingesting Memories ---")
-    brain.add_memory("I am working on a Project called Omega.")
-    brain.add_memory("Omega uses Python and Neo4j for the backend.")
-    brain.add_memory("I prefer using FastAPI over Flask.")
-    brain.add_memory("The database must be self-hosted.")
-    
-    # 2. Query (The Holographic Retrieval)
-    print("\n--- Retrieving Context ---")
-    query = "What is the tech stack for Omega?"
-    context = brain.retrieve(query)
-    
-    print(f"Query: {query}\n")
-    print(f"RAPTOR (High Level): {context['raptor_summary']}")
-    print(f"GRAPH (Facts): {context['knowledge_graph']}")
-    print(f"EPISODIC (Details): {context['episodic_hits']}")
-    
-    brain.close()
+    try:
+        print("--- RAIVEN HCMS ACTIVE ---")
+        print("--- Ingesting Memories ---")
+        brain.add_memory("I am working on a Project called Omega.")
+        brain.add_memory("Omega uses Python and Neo4j for the backend.")
+        
+        print("\n--- Retrieving Context ---")
+        query = "What is the tech stack for Omega?"
+        context = brain.retrieve(query)
+        print(f"Query: {query}")
+        print(f"Facts: {context['knowledge_graph']}")
+    finally:
+        brain.close()
+
+if __name__ == "__main__":
+    main()
