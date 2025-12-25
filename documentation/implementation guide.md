@@ -50,7 +50,7 @@ Configured via environment variables.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `RAIVEN_NEO4J_URI` | Neo4j REST API endpoint | `https://server1os1.oneira.pp.ua/neo4j/` |
-| `RAIVEN_NEO4J_DATABASE` | Database name | `neo4j` |
+| `RAIVEN_NEO4J_DATABASE` | Database name (Fixed to `neo4j` in Community Edition) | `neo4j` |
 | `RAIVEN_OLLAMA_HOST` | Ollama API endpoint | `https://server1os1.oneira.pp.ua/ollama/` |
 | `RAIVEN_OLLAMA_MODEL` | Embedding model | `embeddinggemma:latest` |
 
@@ -61,12 +61,25 @@ Configured via environment variables.
 Raiven exposes its capabilities through the **Model Context Protocol (MCP)**, allowing AI agents like Roo Code to use it as a native tool.
 
 ### Exposed Tools:
-*   **`add_memory(text: str)`**: Ingests new information.
+*   **`add_memory(text: str)`**: Ingests new information. Triggers automatic synaptic pruning and cognitive dissonance decay.
 *   **`retrieve_memory(query: str)`**: Recalls holographic context (Vector + Graph + RAPTOR).
+*   **`forget_memory(chunk_id: str)`**: Removes a specific memory chunk and prunes orphaned graph nodes.
 
 ---
 
-## 5. Development
+## 5. Cognitive Mechanisms
+
+### A. Synaptic Pruning
+Raiven mimics biological brains by pruning "weak" connections. Relationships in the knowledge graph have a `weight` property. If a relationship's weight falls below `0.5`, it is automatically deleted during the next ingestion cycle.
+
+### B. Competitive Plasticity (Cognitive Dissonance)
+When new information about an entity is received, Raiven applies a small decay (`-0.5`) to all existing relationships for that entity.
+*   **Reinforcement:** If the new info matches existing patterns, the weight is increased (+1.0), overcoming the decay.
+*   **Contradiction/Neglect:** If the info is not reinforced, the connections continue to weaken until they are pruned.
+
+---
+
+## 6. Development
 
 ### Project Structure:
 *   `src/raiven/`: Core Python package.

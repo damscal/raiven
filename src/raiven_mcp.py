@@ -78,14 +78,29 @@ def retrieve_memory(query: str, top_k: int = 3) -> str:
         return f"Error retrieving memory: {str(e)}"
 
 @mcp.tool()
+def forget_memory(chunk_id: str) -> str:
+    """
+    Remove a specific memory chunk and trigger graph pruning.
+    Use this if information is known to be false or obsolete.
+    """
+    logger.debug(f"Tool forget_memory called with id: {chunk_id}")
+    try:
+        get_brain().forget_memory(chunk_id)
+        return f"Memory chunk {chunk_id} has been forgotten and orphaned graph nodes pruned."
+    except Exception as e:
+        logger.exception("Error in forget_memory tool")
+        return f"Error forgetting memory: {str(e)}"
+
+@mcp.tool()
 def list_memory_profiles() -> str:
     """
     List all available memory profiles (databases) in the system.
+    Note: In Community Edition, only the default 'neo4j' database is available.
     """
     logger.debug("Tool list_memory_profiles called")
     try:
-        profiles = get_brain().list_databases()
-        return "Available Memory Profiles:\n" + "\n".join([f"- {p}" for p in profiles])
+        brain = get_brain()
+        return f"Available Memory Profiles:\n- {brain.database} (Neo4j Community Edition: Single Database Mode)"
     except Exception as e:
         logger.exception("Error in list_memory_profiles tool")
         return f"Error listing profiles: {str(e)}"
@@ -94,47 +109,10 @@ def list_memory_profiles() -> str:
 def switch_memory_profile(profile_name: str) -> str:
     """
     Switch the active memory profile (database). 
-    This allows you to separate memories for different projects or contexts.
+    Note: In Community Edition, switching is disabled as only one database exists.
     """
     logger.debug(f"Tool switch_memory_profile called with profile: {profile_name}")
-    try:
-        get_brain().switch_database(profile_name)
-        return f"Successfully switched to memory profile: {profile_name}"
-    except Exception as e:
-        logger.exception("Error in switch_memory_profile tool")
-        return f"Error switching profile: {str(e)}"
-
-""" 
-DISABLED BECAUSE THEY NEED NEO4J ENTERPRISE. NEO4J COMMUNITY --> ONLY 1 DATABASE
-@mcp.tool()
-def create_memory_profile(profile_name: str) -> str:
-    """
-    Create a new memory profile (Neo4j database).
-    """
-    logger.debug(f"Tool create_memory_profile called with name: {profile_name}")
-    try:
-        get_brain().create_database(profile_name)
-        return f"Successfully created memory profile: {profile_name}. You can now switch to it using switch_memory_profile."
-    except Exception as e:
-        logger.exception("Error in create_memory_profile tool")
-        return f"Error creating profile: {str(e)}"
-
-@mcp.tool()
-def remove_memory_profile(profile_name: str) -> str:
-    """
-    Permanently remove a memory profile (Neo4j database).
-    WARNING: This will delete all memories stored in that profile.
-    """
-    logger.debug(f"Tool remove_memory_profile called with name: {profile_name}")
-    try:
-        if profile_name == "neo4j":
-            return "Error: Cannot remove the default 'neo4j' profile."
-        get_brain().drop_database(profile_name)
-        return f"Successfully removed memory profile: {profile_name}"
-    except Exception as e:
-        logger.exception("Error in remove_memory_profile tool")
-        return f"Error removing profile: {str(e)}" 
-"""
+    return "Error: Database switching is not supported in Neo4j Community Edition. Only one memory profile ('neo4j') is available."
 
 def main():
     # FastMCP automatically handles stdio transport

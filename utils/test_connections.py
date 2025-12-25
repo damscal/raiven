@@ -39,8 +39,8 @@ def test_neo4j():
     user = os.getenv("RAIVEN_NEO4J_USER", "neo4j")
     pw_file = os.getenv("RAIVEN_NEO4J_PASSWORD_FILE")
     
-    password = read_secret(pw_file)
-    
+    password = os.getenv("RAIVEN_NEO4J_PASSWORD") or read_secret(pw_file)
+
     # We use the standard path. The improved proxy maps /neo4j/ to Neo4j root.
     url = f"{uri.rstrip('/')}/db/neo4j/tx/commit"
     print(f"Targeting endpoint: {url}")
@@ -55,6 +55,13 @@ def test_neo4j():
         encoded_auth = base64.b64encode(auth_str.encode()).decode()
         headers["Authorization"] = f"Basic {encoded_auth}"
         print("Included Basic Auth header.")
+
+    else:
+        print(f"Auth DEBUG: user='{user}'")
+        print(f"Auth DEBUG: uri='{uri}'")
+        print(f"Auth DEBUG: pw_file='{pw_file}'")
+        print(f"Auth DEBUG: env_pw_set={bool(os.getenv('RAIVEN_NEO4J_PASSWORD'))}")
+        print(f"Auth DEBUG: password_len={len(password) if password else 0}")
 
     try:
         payload = {"statements": [{"statement": "RETURN 1 as val"}]}

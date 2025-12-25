@@ -36,18 +36,14 @@ User: Tell me about the server.
 ## Advanced Operations
 
 ### Targeting Different Databases
-You can segregate memories by user or project using different Neo4j databases.
-
-```python
-project_a_memory = CognitiveMemory(database="projectA")
-project_b_memory = CognitiveMemory(database="projectB")
-```
+**Note:** In Neo4j Community Edition, only one database (`neo4j`) is supported. Multi-database segregation is an Enterprise feature and is currently disabled in Raiven.
 
 ### Clearing Memory (Testing)
-To clear a test database:
+To clear the memory in the default database:
 
 ```python
-brain = CognitiveMemory(database="testdb")
+from raiven import CognitiveMemory
+brain = CognitiveMemory()
 brain._query_neo4j("MATCH (n) DETACH DELETE n")
 ```
 

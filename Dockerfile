@@ -19,6 +19,13 @@ RUN pip install --no-cache-dir .
 # Force logs to be unbuffered
 ENV PYTHONUNBUFFERED=1
 
-# Run the MCP server
-# Use direct script call to avoid any potential -m issues with packages
+# ARG for the password, to be passed with $(cat ...)
+ARG RAIVEN_NEO4J_PASSWORD
+ENV RAIVEN_NEO4J_PASSWORD=${RAIVEN_NEO4J_PASSWORD}
+
+# ARG for Ollama API Key
+ARG RAIVEN_OLLAMA_API_KEY
+ENV RAIVEN_OLLAMA_API_KEY=${RAIVEN_OLLAMA_API_KEY}
+
+# Specify the entrypoint
 ENTRYPOINT ["python", "/app/src/raiven_mcp.py"]

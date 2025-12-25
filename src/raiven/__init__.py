@@ -27,11 +27,12 @@ def read_secret(file_path: str) -> str:
 # Configuration from environment variables
 NEO4J_URI = get_config("RAIVEN_NEO4J_URI", "https://server1os1.oneira.pp.ua/neo4j/")
 NEO4J_USER = get_config("RAIVEN_NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = read_secret(get_config("RAIVEN_NEO4J_PASSWORD_FILE"))
+# Try RAIVEN_NEO4J_PASSWORD first (for Docker/baking), then fallback to RAIVEN_NEO4J_PASSWORD_FILE
+NEO4J_PASSWORD = get_config("RAIVEN_NEO4J_PASSWORD") or read_secret(get_config("RAIVEN_NEO4J_PASSWORD_FILE"))
 NEO4J_DATABASE = get_config("RAIVEN_NEO4J_DATABASE") # Default to None to use system default if not set
 
 OLLAMA_HOST = get_config("RAIVEN_OLLAMA_HOST", "https://server1os1.oneira.pp.ua/ollama/")
-OLLAMA_API_KEY = read_secret(get_config("RAIVEN_OLLAMA_API_KEY_FILE"))
+OLLAMA_API_KEY = get_config("RAIVEN_OLLAMA_API_KEY") or read_secret(get_config("RAIVEN_OLLAMA_API_KEY_FILE"))
 EMBEDDING_MODEL = get_config("RAIVEN_OLLAMA_MODEL", "embeddinggemma:latest")
 VECTOR_DIMENSIONS = int(get_config("RAIVEN_VECTOR_DIMENSIONS", "768"))
 
@@ -51,21 +52,16 @@ class CognitiveMemory:
             auth_str = f"{NEO4J_USER}:{NEO4J_PASSWORD}"
             encoded_auth = base64.b64encode(auth_str.encode()).decode()
             self.neo4j_headers["Authorization"] = f"Basic {encoded_auth}"
-            
+        
         self._initialize_schema()
 
     def close(self):
         pass
 
-    def _query_neo4j(self, cypher: str, parameters: Dict[str, Any] = None, database: str = None) -> Dict[str, Any]:
+    def _query_neo4j(self, cypher: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Executes a Cypher query via the Neo4j REST API.
         """
-        # If a specific database is requested for this query, adjust the URL
-        url = self.neo4j_url
-        if database:
-            url = f"{NEO4J_URI.rstrip('/')}/db/{database}/tx/commit"
-
         payload = {
             "statements": [
                 {
@@ -74,55 +70,13 @@ class CognitiveMemory:
                 }
             ]
         }
-        response = requests.post(url, json=payload, headers=self.neo4j_headers)
+        response = requests.post(self.neo4j_url, json=payload, headers=self.neo4j_headers)
         response.raise_for_status()
         
         data = response.json()
         if data.get("errors"):
             raise Exception(f"Neo4j Error: {data['errors']}")
         return data
-
-    def list_databases(self) -> List[str]:
-        """
-        Lists all available databases in the Neo4j instance.
-        Note: SHOW DATABASES requires administrative privileges and usually 
-        runs against the 'system' database.
-        """
-        try:
-            # We try to query the system database for the list of databases
-            res = self._query_neo4j("SHOW DATABASES", database="system")
-            # results[0].data -> list of {row: [name, ...]}
-            rows = res["results"][0]["data"]
-            return [r["row"][0] for r in rows if r["row"][0] != "system"]
-        except Exception as e:
-            print(f"Warning: Could not list databases: {e}")
-            return [self.database]
-
-    def switch_database(self, database_name: str):
-        """
-        Switches the active database profile.
-        """
-        self.database = database_name
-        self.neo4j_url = f"{NEO4J_URI.rstrip('/')}/db/{self.database}/tx/commit"
-        self._initialize_schema()
-        import sys
-        print(f">> Switched to database profile: {self.database}", file=sys.stderr)
-
-    def create_database(self, database_name: str):
-        """
-        Creates a new database in Neo4j.
-        """
-        self._query_neo4j(f"CREATE DATABASE {database_name} IF NOT EXISTS", database="system")
-        import sys
-        print(f">> Created database: {database_name}", file=sys.stderr)
-
-    def drop_database(self, database_name: str):
-        """
-        Removes a database from Neo4j.
-        """
-        self._query_neo4j(f"DROP DATABASE {database_name} IF EXISTS", database="system")
-        import sys
-        print(f">> Dropped database: {database_name}", file=sys.stderr)
 
     def _initialize_schema(self):
         # We use a try-except block and print to stderr to avoid polluting stdout for MCP
@@ -186,6 +140,17 @@ class CognitiveMemory:
         # Simple heuristic extraction since Ollama is only for embeddings
         extracted_entities = [word.strip(".,!?") for word in text.split() if word[0].isupper() and len(word) > 1] 
 
+        # --- Cognitive Dissonance Check ---
+        # If the new memory mentions existing entities, check for potential contradictions
+        # This is a simplified version of synapse weakening
+        for entity_name in extracted_entities:
+            self._query_neo4j("""
+                MATCH (e1:Entity {name: $name})-[r:RELATED_TO]-(e2:Entity)
+                SET r.weight = r.weight - 0.5
+            """, {"name": entity_name})
+            # Note: We weaken ALL relationships for this entity slightly upon new input
+            # to simulate "competitive plasticity" - new info forces re-evaluation.
+
         query_chunk = """
         CREATE (c:Chunk {
             id: $id, 
@@ -210,11 +175,14 @@ class CognitiveMemory:
             MATCH (c)-[:MENTIONS]->(e2:Entity)
             WHERE e1 <> e2
             MERGE (e1)-[r:RELATED_TO]->(e2)
-            ON CREATE SET r.weight = 1
-            ON MATCH SET r.weight = r.weight + 1
+            ON CREATE SET r.weight = 2.0
+            ON MATCH SET r.weight = r.weight + 1.0
             """
             self._query_neo4j(query_rel, {"chunk_id": chunk_id})
 
+        # --- Automatic Background Pruning ---
+        self.prune_weak_connections(threshold=0.5)
+        
         self._update_raptor_tree()
 
     def _update_raptor_tree(self):
@@ -251,6 +219,46 @@ class CognitiveMemory:
         """, {"sid": summary_id, "stext": summary_text, "svec": summary_vec, "child_ids": [c['id'] for c in chunks]})
         import sys
         print(f">> RAPTOR: Created Level 1 Summary for {len(chunks)} chunks.", file=sys.stderr)
+
+    def forget_memory(self, chunk_id: str):
+        """
+        Removes a specific chunk and prunes orphan entities/relationships.
+        """
+        # 1. Delete the chunk and its mentions
+        self._query_neo4j("""
+            MATCH (c:Chunk {id: $id})
+            DETACH DELETE c
+        """, {"id": chunk_id})
+        
+        # 2. Prune entities that no longer have any mentions
+        self._query_neo4j("""
+            MATCH (e:Entity)
+            WHERE NOT (e)<-[:MENTIONS]-(:Chunk)
+            DETACH DELETE e
+        """)
+        
+        # 3. TODO: Recalculate RAPTOR summaries if needed
+        import sys
+        print(f">> Pruned memory chunk: {chunk_id}", file=sys.stderr)
+
+    def prune_weak_connections(self, threshold: float = 0.5):
+        """
+        Removes relationships that have decayed below a threshold and prunes orphan entities.
+        """
+        # Delete weak relationships
+        self._query_neo4j("""
+            MATCH ()-[r:RELATED_TO]->()
+            WHERE r.weight <= $threshold
+            DELETE r
+        """, {"threshold": threshold})
+        
+        # Prune orphaned entities (no mentions AND no relationships)
+        self._query_neo4j("""
+            MATCH (e:Entity)
+            WHERE NOT (e)<-[:MENTIONS]-(:Chunk) 
+              AND NOT (e)-[:RELATED_TO]-()
+            DETACH DELETE e
+        """)
 
     def retrieve(self, query: str, top_k: int = 3):
         query_vec = self._embed(query)

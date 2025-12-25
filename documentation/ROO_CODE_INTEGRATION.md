@@ -8,7 +8,9 @@ This guide explains how to enable Roo Code to use Raiven as its long-term memory
 To ensure Raiven is portable across all your devices, we use a Docker-based MCP server. Run this in the root of the Raiven repository:
 
 ```bash
-docker build -t raiven-mcp .
+docker build \
+  --build-arg RAIVEN_NEO4J_PASSWORD=$(cat ~/.config/sops-nix/secrets/server1os1-neo4j-password) \
+  -t raiven-mcp .
 ```
 
 ### Configuration
