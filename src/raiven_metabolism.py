@@ -18,6 +18,7 @@ def run_metabolism_cycle():
     It processes embeddings, cognitive dissonance, and RAPTOR summarization
     at a slow pace to avoid overloading the server.
     """
+    logger = logging.getLogger("raiven_metabolism")
     logger.info("Raiven Metabolism Process Started")
     
     # Initialize brain connection
@@ -36,6 +37,13 @@ def run_metabolism_cycle():
                 MATCH (c:Chunk {needs_embedding: true})
                 RETURN count(c) as count
             """)
+            
+            # Defensive check for Neo4j response structure
+            if not result or "results" not in result or not result["results"]:
+                logger.warning("Empty or invalid result from Neo4j")
+                time.sleep(30)
+                continue
+                
             pending_emb = result["results"][0]["data"][0]["row"][0]
             
             if pending_emb > 0:
@@ -56,7 +64,11 @@ def run_metabolism_cycle():
                 WHERE c.dissonance_checked IS NULL AND NOT c.needs_embedding
                 RETURN count(c) as count
             """)
-            pending_diss = result_diss["results"][0]["data"][0]["row"][0]
+            
+            if not result_diss or "results" not in result_diss or not result_diss["results"]:
+                pending_diss = 0
+            else:
+                pending_diss = result_diss["results"][0]["data"][0]["row"][0]
             
             if pending_diss > 0:
                 logger.info(f"Analyzing dissonance for 1 of {pending_diss} chunks...")
@@ -81,6 +93,12 @@ def run_metabolism_cycle():
             time.sleep(60) # Wait on error
 
 def main():
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stdout
+    )
     # Ensure we can import raiven package
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     run_metabolism_cycle()
