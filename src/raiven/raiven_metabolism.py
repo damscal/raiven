@@ -2,7 +2,15 @@ import time
 import sys
 import os
 import logging
-from raiven import CognitiveMemory
+
+# Configure logging at module level for entry point compatibility
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+
+from . import CognitiveMemory
 
 # Configure logging
 logging.basicConfig(
@@ -93,14 +101,7 @@ def run_metabolism_cycle():
             time.sleep(60) # Wait on error
 
 def main():
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        stream=sys.stdout
-    )
     # Ensure we can import raiven package
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     run_metabolism_cycle()
 
 if __name__ == "__main__":

@@ -15,11 +15,14 @@ dependencies = [
 
 [project.scripts]
 raiven = "raiven:main"
-raiven-mcp = "raiven_mcp:main"
-raiven-metabolism = "raiven_metabolism:main"
+raiven-mcp = "raiven.raiven_mcp:main"
+raiven-metabolism = "raiven.raiven_metabolism:main"
 
 [tool.setuptools.package-dir]
 "" = "src"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.py"]
