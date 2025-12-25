@@ -80,7 +80,10 @@ def run_metabolism_cycle():
             logger.error(f"Error in metabolism cycle: {e}")
             time.sleep(60) # Wait on error
 
-if __name__ == "__main__":
+def main():
     # Ensure we can import raiven package
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     run_metabolism_cycle()
+
+if __name__ == "__main__":
+    main()
