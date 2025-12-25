@@ -35,38 +35,34 @@ def get_brain():
     return brain
 
 @mcp.tool()
-def check_and_start_metabolism() -> str:
+def check_metabolism() -> str:
     """
-    Checks if the Subconscious Metabolism process is running and starts it if not.
+    Checks if the Subconscious Metabolism process is running in the server.
     """
-    logger.debug("Tool check_and_start_metabolism called")
+    logger.debug("Tool check_metabolism called")
     try:
-        # Check if the metabolism process is running (searching for the script name)
-        # Using pgrep -f to match the full command line
-        try:
-            result = subprocess.run(["pgrep", "-f", "raiven_metabolism.py"], capture_output=True, text=True)
-            if result.returncode == 0:
-                pids = result.stdout.strip().split()
-                return f"Subconscious Metabolism is already active (PIDs: {', '.join(pids)})."
-        except FileNotFoundError:
-            # pgrep might not be available in some minimal environments
-            logger.warning("pgrep not found, skipping check and attempting to start.")
+        brain = get_brain()
+        # Query the dedicated heartbeat node
+        result = brain._query_neo4j("""
+            MATCH (h:Heartbeat {id: 'metabolism'})
+            RETURN h.last_seen as last_seen, 
+                   duration.between(datetime(h.last_seen), datetime()).seconds as seconds_ago
+        """)
+        
+        if result and "results" in result and result["results"] and result["results"][0]["data"]:
+            data = result["results"][0]["data"][0]["row"]
+            last_seen = data[0]
+            seconds_ago = data[1]
+            
+            if seconds_ago < 300: # Active if seen in the last 5 minutes
+                return f"Subconscious Metabolism is ACTIVE in the server. Last heartbeat: {last_seen} ({seconds_ago} seconds ago)."
+            else:
+                return f"Subconscious Metabolism STALLED: Last heartbeat was {seconds_ago} seconds ago ({last_seen}). Please check systemd service 'raiven-metabolism'."
 
-        # If not running, attempt to start it
-        metabolism_path = os.path.join(os.path.dirname(__file__), "raiven_metabolism.py")
-        
-        # We use Popen with setsid or similar to ensure it survives if the MCP server restarts
-        # depending on the environment. In Docker, it's simpler to run as a separate container,
-        # but this tool provides a safety valve.
-        subprocess.Popen([sys.executable, metabolism_path], 
-                         stdout=subprocess.DEVNULL, 
-                         stderr=subprocess.DEVNULL,
-                         start_new_session=True)
-        
-        return "Subconscious Metabolism was not active. Successfully triggered it in the background."
+        return "Subconscious Metabolism status UNKNOWN: No heartbeat node found in database. The metabolism might not have started yet or has failed."
     except Exception as e:
-        logger.exception("Error in check_and_start_metabolism tool")
-        return f"Error checking/starting metabolism: {str(e)}"
+        logger.exception("Error in check_metabolism tool")
+        return f"Error checking metabolism status: {str(e)}"
 
 @mcp.tool()
 def add_memory(text: str, role: str = "user", entities: list[str] = None) -> str:

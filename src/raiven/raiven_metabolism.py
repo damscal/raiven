@@ -94,6 +94,17 @@ def run_metabolism_cycle():
             
             # If we got here, the system is mostly up to date. Long sleep.
             logger.info("System up to date. Sleeping...")
+            
+            # Update heartbeat in Neo4j
+            try:
+                brain._query_neo4j("""
+                    MERGE (h:Heartbeat {id: 'metabolism'})
+                    SET h.last_seen = datetime(),
+                        h.status = 'active'
+                """)
+            except Exception as e:
+                logger.error(f"Failed to update heartbeat: {e}")
+                
             time.sleep(60)
 
         except Exception as e:
