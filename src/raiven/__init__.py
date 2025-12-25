@@ -25,13 +25,13 @@ def read_secret(file_path: str) -> str:
     return ""
 
 # Configuration from environment variables
-NEO4J_URI = get_config("RAIVEN_NEO4J_URI", "https://server1os1.oneira.pp.ua/neo4j/")
+NEO4J_URI = get_config("RAIVEN_NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = get_config("RAIVEN_NEO4J_USER", "neo4j")
 # Try RAIVEN_NEO4J_PASSWORD first (for Docker/baking), then fallback to RAIVEN_NEO4J_PASSWORD_FILE
 NEO4J_PASSWORD = get_config("RAIVEN_NEO4J_PASSWORD") or read_secret(get_config("RAIVEN_NEO4J_PASSWORD_FILE"))
 NEO4J_DATABASE = get_config("RAIVEN_NEO4J_DATABASE") # Default to None to use system default if not set
 
-OLLAMA_HOST = get_config("RAIVEN_OLLAMA_HOST", "https://server1os1.oneira.pp.ua/ollama/")
+OLLAMA_HOST = get_config("RAIVEN_OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_API_KEY = get_config("RAIVEN_OLLAMA_API_KEY") or read_secret(get_config("RAIVEN_OLLAMA_API_KEY_FILE"))
 EMBEDDING_MODEL = get_config("RAIVEN_OLLAMA_MODEL", "embeddinggemma:latest")
 CHAT_MODEL = get_config("RAIVEN_OLLAMA_CHAT_MODEL", "gemma:2b") 
@@ -41,8 +41,11 @@ VECTOR_DIMENSIONS = int(get_config("RAIVEN_VECTOR_DIMENSIONS", "768"))
 class CognitiveMemory:
     def __init__(self, database: str = None):
         self.database = database or NEO4J_DATABASE or "neo4j"
-        # We explicitly target the /db/ sub-path under /neo4j/
-        self.neo4j_url = f"{NEO4J_URI.rstrip('/')}/db/{self.database}/tx/commit"
+        # Check if URI is bolt or http
+        if NEO4J_URI.startswith("bolt"):
+             self.neo4j_url = NEO4J_URI # Bolt uses its own protocol
+        else:
+             self.neo4j_url = f"{NEO4J_URI.rstrip('/')}/db/{self.database}/tx/commit"
             
         self.neo4j_headers = {
             "Content-Type": "application/json",
@@ -62,8 +65,22 @@ class CognitiveMemory:
 
     def _query_neo4j(self, cypher: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Executes a Cypher query via the Neo4j REST API.
+        Executes a Cypher query via the Neo4j REST API or Bolt.
         """
+        if self.neo4j_url.startswith("bolt"):
+            from neo4j import GraphDatabase
+            # We use a context manager for the driver if we were in a long-lived app,
+            # but for simplicity in this REST-compatible structure, we create it.
+            # In a production environment with Bolt, using the official driver is better.
+            with GraphDatabase.driver(self.neo4j_url, auth=(NEO4J_USER, NEO4J_PASSWORD)) as driver:
+                with driver.session(database=self.database) as session:
+                    result = session.run(cypher, parameters or {})
+                    # Format to match the REST API response structure expected by other methods
+                    data = {"results": [{"columns": [], "data": []}], "errors": []}
+                    for record in result:
+                        data["results"][0]["data"].append({"row": list(record.values())})
+                    return data
+
         payload = {
             "statements": [
                 {
