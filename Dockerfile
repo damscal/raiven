@@ -29,4 +29,4 @@ ENV RAIVEN_OLLAMA_API_KEY=${RAIVEN_OLLAMA_API_KEY}
 
 # By default run the MCP server, but allow overriding to run metabolism
 ENTRYPOINT ["python"]
-CMD ["/app/src/raiven_mcp.py"]
+CMD ["-m", "raiven.raiven_mcp"]

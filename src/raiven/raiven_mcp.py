@@ -3,10 +3,15 @@ import os
 import logging
 import subprocess
 import json
+import uuid
 
 # Configure logging to stderr
 logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
 logger = logging.getLogger("raiven_mcp")
+
+# Global state for recording
+recording_session_id = None
+recording_session_name = None
 
 # FastMCP doesn't strictly need this if installed as package, 
 # but for Docker/direct run it helps.
@@ -63,6 +68,90 @@ def check_metabolism() -> str:
     except Exception as e:
         logger.exception("Error in check_metabolism tool")
         return f"Error checking metabolism status: {str(e)}"
+
+@mcp.tool()
+def start_recording(session_name: str) -> str:
+    """
+    Starts recording the conversation into an isolated session log.
+    
+    Args:
+        session_name: A descriptive name for this chat session.
+    """
+    global recording_session_id, recording_session_name
+    recording_session_id = str(uuid.uuid4())
+    recording_session_name = session_name
+    return f"Recording started for session: '{session_name}' (ID: {recording_session_id}). All subsequent messages will be archived."
+
+@mcp.tool()
+def stop_recording(summary: str) -> str:
+    """
+    Stops the current conversation recording and adds a summary to vectorized memory.
+    
+    Args:
+        summary: A concise summary of the recorded conversation.
+    """
+    global recording_session_id, recording_session_name
+    if recording_session_id is None:
+        return "No active recording session found."
+    
+    try:
+        brain = get_brain()
+        # 1. Add the summary as a normal memory chunk (vectorized)
+        # We include the session name and ID to contextualize the search hit later
+        full_summary_text = f"SESSION SUMMARY ({recording_session_name}): {summary}"
+        brain.add_memory(
+            text=full_summary_text,
+            role="assistant",
+            entities=["Session Summary", recording_session_name]
+        )
+        
+        # 2. Link this summary to the Session node and its messages
+        # We find the newly created chunk (highest timestamp/uuid) and link it
+        cypher = """
+        MATCH (s:Session {id: $sid})
+        MATCH (c:Chunk) WHERE c.text = $stext
+        MERGE (s)-[:SUMMARIZED_BY]->(c)
+        WITH s, c
+        MATCH (s)-[:HAS_MESSAGE]->(m:MessageLog)
+        MERGE (c)-[:SUMMARIZES_LOG]->(m)
+        """
+        brain._query_neo4j(cypher, {
+            "sid": recording_session_id,
+            "stext": full_summary_text
+        })
+        
+        old_name = recording_session_name
+        recording_session_id = None
+        recording_session_name = None
+        return f"Recording stopped for session: '{old_name}'. Summary has been vectorized and linked to the logs."
+    except Exception as e:
+        logger.exception("Error in stop_recording tool")
+        return f"Error stopping recording: {str(e)}"
+
+@mcp.tool()
+def log_chat_message(text: str, role: str) -> str:
+    """
+    Internal tool to log a message when a session is active.
+    
+    Args:
+        text: Message content.
+        role: 'user' or 'assistant'.
+    """
+    global recording_session_id, recording_session_name
+    if recording_session_id is None:
+        return "Skip: No active recording."
+    
+    try:
+        get_brain().log_session_message(
+            recording_session_id, 
+            recording_session_name, 
+            text, 
+            role
+        )
+        return "Message archived."
+    except Exception as e:
+        logger.error(f"Failed to log message: {e}")
+        return f"Error archiving message: {str(e)}"
 
 @mcp.tool()
 def add_memory(text: str, role: str = "user", entities: list[str] = None) -> str:
@@ -303,6 +392,30 @@ def query_knowledge_graph(cypher: str, parameters: dict = None) -> str:
     except Exception as e:
         logger.exception("Error in query_knowledge_graph tool")
         return f"Error executing Cypher query: {str(e)}"
+
+@mcp.tool()
+def get_session_logs(session_id: str) -> str:
+    """
+    Retrieves the chronological message log for a specific session.
+    """
+    logger.debug(f"Tool get_session_logs called for session: {session_id}")
+    try:
+        brain = get_brain()
+        cypher = """
+        MATCH (s:Session {id: $sid})-[:HAS_MESSAGE]->(m:MessageLog)
+        RETURN m.role as role, m.text as text, m.timestamp as time
+        ORDER BY m.timestamp ASC
+        """
+        result = brain._query_neo4j(cypher, {"sid": session_id})
+        
+        output = [f"--- Backup Log for Session: {session_id} ---"]
+        for r in result["results"][0]["data"]:
+            output.append(f"[{r['row'][2]}] {r['row'][0].upper()}: {r['row'][1]}")
+        
+        return "\n\n".join(output)
+    except Exception as e:
+        logger.exception("Error in get_session_logs tool")
+        return f"Error retrieving logs: {str(e)}"
 
 @mcp.tool()
 def list_memory_profiles() -> str:

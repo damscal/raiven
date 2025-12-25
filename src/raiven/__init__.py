@@ -217,6 +217,40 @@ class CognitiveMemory:
 
         self.prune_weak_connections(threshold=0.5)
 
+    def log_session_message(self, session_id: str, session_name: str, text: str, role: str):
+        """
+        Records a message into a specific session log, isolated from main knowledge.
+        """
+        message_id = str(uuid.uuid4())
+        cypher = """
+        MERGE (s:Session {id: $sid})
+        ON CREATE SET s.name = $sname, s.started_at = datetime()
+        
+        CREATE (m:MessageLog {
+            id: $mid,
+            text: $text,
+            role: $role,
+            timestamp: datetime()
+        })
+        
+        MERGE (s)-[:HAS_MESSAGE]->(m)
+        
+        WITH s, m
+        MATCH (s)-[:HAS_MESSAGE]->(prev:MessageLog)
+        WHERE prev <> m
+        WITH m, prev
+        ORDER BY prev.timestamp DESC
+        LIMIT 1
+        MERGE (prev)-[:NEXT_MESSAGE]->(m)
+        """
+        self._query_neo4j(cypher, {
+            "sid": session_id,
+            "sname": session_name,
+            "mid": message_id,
+            "text": text,
+            "role": role
+        })
+
     def trigger_consolidation(self):
         """
         Manually triggers embedding generation for pending chunks,
