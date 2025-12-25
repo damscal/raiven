@@ -34,6 +34,8 @@ NEO4J_DATABASE = get_config("RAIVEN_NEO4J_DATABASE") # Default to None to use sy
 OLLAMA_HOST = get_config("RAIVEN_OLLAMA_HOST", "https://server1os1.oneira.pp.ua/ollama/")
 OLLAMA_API_KEY = get_config("RAIVEN_OLLAMA_API_KEY") or read_secret(get_config("RAIVEN_OLLAMA_API_KEY_FILE"))
 EMBEDDING_MODEL = get_config("RAIVEN_OLLAMA_MODEL", "embeddinggemma:latest")
+CHAT_MODEL = get_config("RAIVEN_OLLAMA_CHAT_MODEL", "gemma:2b") 
+SUBCONSCIOUS_MODEL = get_config("RAIVEN_OLLAMA_SUBCONSCIOUS_MODEL", "gemma:2b") # Reverted to gemma:2b for stability
 VECTOR_DIMENSIONS = int(get_config("RAIVEN_VECTOR_DIMENSIONS", "768"))
 
 class CognitiveMemory:
@@ -126,41 +128,57 @@ class CognitiveMemory:
         }
         
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            # Short timeout for embedding to avoid blocking the MCP server indefinitely
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
             response.raise_for_status()
             return response.json()["embedding"]
         except Exception as e:
-            print(f"Error calling Ollama: {e}")
+            # We log to stderr and re-raise, but the short timeout protects the MCP server
+            import sys
+            print(f"Error calling Ollama: {e}", file=sys.stderr)
             raise
 
-    def add_memory(self, text: str, role: str = "user"):
-        embedding = self._embed(text)
+    def _chat(self, prompt: str, model: str = None) -> str:
+        """
+        Generates a completion using the configured chat model.
+        """
+        target_model = model or CHAT_MODEL
+        url = f"{OLLAMA_HOST.rstrip('/')}/api/generate"
+        headers = {"X-Api-Key": OLLAMA_API_KEY} if OLLAMA_API_KEY else {}
+        payload = {
+            "model": target_model,
+            "prompt": prompt,
+            "stream": False
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()["response"]
+        except Exception as e:
+            print(f"Error calling Ollama Chat ({target_model}): {e}")
+            return ""
+
+    def add_memory(self, text: str, role: str = "user", entities: List[str] = None):
         chunk_id = str(uuid.uuid4())
         
-        # Simple heuristic extraction since Ollama is only for embeddings
-        extracted_entities = [word.strip(".,!?") for word in text.split() if word[0].isupper() and len(word) > 1] 
+        # --- Entity Extraction Strategy ---
+        if entities:
+            extracted_entities = entities
+        else:
+            extracted_entities = [word.strip(".,!?") for word in text.split() if word[0].isupper() and len(word) > 1] 
 
-        # --- Cognitive Dissonance Check ---
-        # If the new memory mentions existing entities, check for potential contradictions
-        # This is a simplified version of synapse weakening
-        for entity_name in extracted_entities:
-            self._query_neo4j("""
-                MATCH (e1:Entity {name: $name})-[r:RELATED_TO]-(e2:Entity)
-                SET r.weight = r.weight - 0.5
-            """, {"name": entity_name})
-            # Note: We weaken ALL relationships for this entity slightly upon new input
-            # to simulate "competitive plasticity" - new info forces re-evaluation.
-
+        # We store the chunk WITHOUT embedding first to make the call near-instant
         query_chunk = """
         CREATE (c:Chunk {
             id: $id, 
             text: $text, 
             role: $role, 
             timestamp: datetime(),
-            embedding: $embedding
+            needs_embedding: true
         })
         """
-        self._query_neo4j(query_chunk, {"id": chunk_id, "text": text, "role": role, "embedding": embedding})
+        self._query_neo4j(query_chunk, {"id": chunk_id, "text": text, "role": role})
 
         for entity_name in extracted_entities:
             query_entity = """
@@ -180,10 +198,95 @@ class CognitiveMemory:
             """
             self._query_neo4j(query_rel, {"chunk_id": chunk_id})
 
-        # --- Automatic Background Pruning ---
         self.prune_weak_connections(threshold=0.5)
-        
+
+    def trigger_consolidation(self):
+        """
+        Manually triggers embedding generation for pending chunks,
+        checks for cognitive dissonance, and updates RAPTOR summarization.
+        """
+        self._process_pending_embeddings()
+        self._resolve_cognitive_dissonance()
         self._update_raptor_tree()
+
+    def _resolve_cognitive_dissonance(self):
+        """
+        Analyzes recent chunks for potential contradictions with existing knowledge
+        using the internal LLM.
+        """
+        # Find chunks that haven't been checked for dissonance yet
+        result = self._query_neo4j("""
+            MATCH (c:Chunk)
+            WHERE c.dissonance_checked IS NULL AND NOT c.needs_embedding
+            RETURN c.id as id, c.text as text
+            LIMIT 5
+        """)
+        
+        rows = result["results"][0]["data"]
+        for r in rows:
+            cid, text = r["row"][0], r["row"][1]
+            
+            # Find potentially related information in the graph
+            context = self.retrieve(text, top_k=2)
+            existing_knowledge = "\n".join(context["episodic_hits"])
+            
+            if not existing_knowledge:
+                self._query_neo4j("MATCH (c:Chunk {id: $id}) SET c.dissonance_checked = true", {"id": cid})
+                continue
+
+            prompt = f"""
+            Analyze the following NEW information against the EXISTING knowledge.
+            Identify if there are direct contradictions or significant inconsistencies.
+            
+            EXISTING KNOWLEDGE:
+            {existing_knowledge}
+            
+            NEW INFORMATION:
+            {text}
+            
+            If there is a contradiction, explain it briefly. If they are consistent, reply 'CONSISTENT'.
+            """
+            
+            analysis = self._chat(prompt, model=SUBCONSCIOUS_MODEL)
+            
+            if "CONSISTENT" not in analysis.upper():
+                # Mark potential dissonance without automatically weakening connections.
+                # It is Malik's (active consciousness) responsibility to review these.
+                import sys
+                print(f">> Potential Cognitive Dissonance flagged in {cid} using {SUBCONSCIOUS_MODEL}", file=sys.stderr)
+                self._query_neo4j("""
+                    MATCH (c:Chunk {id: $id})
+                    SET c.dissonance_checked = true, 
+                        c.potential_dissonance = true, 
+                        c.dissonance_report = $report
+                """, {"id": cid, "report": analysis})
+            else:
+                self._query_neo4j("MATCH (c:Chunk {id: $id}) SET c.dissonance_checked = true", {"id": cid})
+
+    def _process_pending_embeddings(self, limit: int = 10):
+        """
+        Finds chunks that need embeddings, generates them, and updates Neo4j.
+        """
+        result = self._query_neo4j("""
+            MATCH (c:Chunk {needs_embedding: true})
+            RETURN c.id as id, c.text as text
+            LIMIT $limit
+        """, {"limit": limit})
+        
+        rows = result["results"][0]["data"]
+        for r in rows:
+            cid, text = r["row"][0], r["row"][1]
+            try:
+                embedding = self._embed(text)
+                self._query_neo4j("""
+                    MATCH (c:Chunk {id: $id})
+                    SET c.embedding = $emb, c.needs_embedding = false
+                """, {"id": cid, "emb": embedding})
+                import sys
+                print(f">> Generated embedding for chunk: {cid}", file=sys.stderr)
+            except Exception as e:
+                import sys
+                print(f"Error generating embedding for {cid}: {e}", file=sys.stderr)
 
     def _update_raptor_tree(self):
         result = self._query_neo4j("""
@@ -198,9 +301,16 @@ class CognitiveMemory:
         
         if len(chunks) < 3: return
 
-        # Simple concatenation summary since we don't have a generator LLM in Ollama
+        # --- Advanced Summarization via LLM ---
         combined_text = " ".join([c['text'] for c in chunks])
-        summary_text = f"Summary: {combined_text[:200]}..."
+        prompt = f"""
+        Summarize the following text into a concise, high-level abstract.
+        Text: {combined_text}
+        """
+        summary_text = self._chat(prompt)
+        if not summary_text:
+             summary_text = f"Summary: {combined_text[:200]}..."
+
         summary_vec = self._embed(summary_text)
         summary_id = str(uuid.uuid4())
 
@@ -275,7 +385,11 @@ class CognitiveMemory:
             RETURN node.text as text, score
         """, {"vec": query_vec})
 
+        # --- Hybrid Search: Keyword Extraction via LLM ---
+        # Optimized: Use heuristic extraction for speed, fallback to LLM only if needed
+        # For now, we stick to heuristic to avoid latency on retrieval
         keywords = [w.strip(".,!?") for w in query.split() if w[0].isupper() and len(w) > 1]
+        
         graph_context = []
         if keywords:
             res = self._query_neo4j("""

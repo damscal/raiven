@@ -5,10 +5,10 @@ Here is the comprehensive technical documentation for the **Holographic Cognitiv
 # RAIVEN: Holographic Cognitive Memory System (HCMS)
 ### Architecture & Implementation Guide
 
-**Version:** 1.2.0
-**Date:** December 2025
+**Version:** 2.0.0
+**Date:** December 25, 2025
 **Backend:** Neo4j 5.x + Python 3.11+
-**Deployment:** Docker / Nix
+**Architecture:** Dual-Process (Active Consciousness + Subconscious Metabolism)
 
 ---
 
@@ -16,66 +16,51 @@ Here is the comprehensive technical documentation for the **Holographic Cognitiv
 
 The **HCMS** is a hybrid memory architecture designed to provide Large Language Models (LLMs) with long-term, structured, and abstractive memory. 
 
-### Core Philosophy
+### Core Philosophy: The Dual-Process Architecture
+1.  **Active Consciousness (MCP Server):** The fast interface for immediate interaction. Handles text storage, graph updates (mentions), and holographic retrieval. It is optimized for zero-latency in conversations.
+2.  **Subconscious Metabolism (Background Worker):** The slow, reflective process. It handles heavy compute tasks:
+    *   **Delayed Embedding:** Generates vector embeddings for new chunks at a controlled pace.
+    *   **Cognitive Dissonance Detection:** Uses advanced LLMs to identify contradictions between new and existing knowledge.
+    *   **RAPTOR Consolidation:** Builds the recursive summarization tree.
+
+---
+
+## 2. Memory Layers
+
 1.  **Episodic Memory (The Stream):** Stores raw interactions as vector-embedded chunks.
-2.  **Semantic Memory (The Web):** Heuristically extracts entities and builds a knowledge graph.
-3.  **Abstractive Memory (The Tree):** Uses **RAPTOR** to group chunks and generate higher-level summaries.
+2.  **Semantic Memory (The Web):** Heuristically extracts entities and builds a knowledge graph. Supports client-side entity extraction to save resources.
+3.  **Abstractive Memory (The Tree):** Uses **RAPTOR** to group chunks and generate higher-level summaries via internal LLM.
 
 ---
 
-## 2. Deployment
+## 3. Cognitive Mechanisms
 
-Raiven can be deployed as a local Python package, a Nix-based troubleshooting environment, or a device-agnostic Docker container.
+### A. Delayed Processing
+To maintain stability on limited hardware, all Ollama-based operations (embeddings, chat generation for summaries) are deferred to the metabolism phase. Chunks are stored with a `needs_embedding: true` flag.
 
-### A. Docker (Recommended for MCP)
-The system includes a `Dockerfile` that packages the core library and the MCP server.
+### B. Cognitive Dissonance
+The Subconscious Metabolism periodically reviews unchecked memories:
+*   **Verification:** Compares new info against retrieved context using a capable model (`SUBCONSCIOUS_MODEL`).
+*   **Flagging:** If a conflict is detected, the memory is marked with `potential_dissonance: true` and a report is generated.
+*   **Resolution:** Malik (the active consciousness) is notified during chat and can resolve the issue using `resolve_dissonance` or `update_memory_chunk`.
 
-```bash
-docker build -t raiven-mcp .
-```
-
-### B. Nix
-For NixOS users, the `flake.nix` and `shell.nix` provide a fully reproducible environment.
-
-```bash
-nix-shell
-```
-
----
-
-## 3. Configuration
-
-Configured via environment variables.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RAIVEN_NEO4J_URI` | Neo4j REST API endpoint | `https://server1os1.oneira.pp.ua/neo4j/` |
-| `RAIVEN_NEO4J_DATABASE` | Database name (Fixed to `neo4j` in Community Edition) | `neo4j` |
-| `RAIVEN_OLLAMA_HOST` | Ollama API endpoint | `https://server1os1.oneira.pp.ua/ollama/` |
-| `RAIVEN_OLLAMA_MODEL` | Embedding model | `embeddinggemma:latest` |
+### C. Synaptic Pruning
+Raiven mimics biological brains by pruning "weak" connections. Relationships in the knowledge graph have a `weight` property that decays or strengthens based on reinforcement.
 
 ---
 
 ## 4. MCP Integration
 
-Raiven exposes its capabilities through the **Model Context Protocol (MCP)**, allowing AI agents like Roo Code to use it as a native tool.
+Raiven exposes its capabilities through the **Model Context Protocol (MCP)**.
 
-### Exposed Tools:
-*   **`add_memory(text: str)`**: Ingests new information. Triggers automatic synaptic pruning and cognitive dissonance decay.
-*   **`retrieve_memory(query: str)`**: Recalls holographic context (Vector + Graph + RAPTOR).
-*   **`forget_memory(chunk_id: str)`**: Removes a specific memory chunk and prunes orphaned graph nodes.
-
----
-
-## 5. Cognitive Mechanisms
-
-### A. Synaptic Pruning
-Raiven mimics biological brains by pruning "weak" connections. Relationships in the knowledge graph have a `weight` property. If a relationship's weight falls below `0.5`, it is automatically deleted during the next ingestion cycle.
-
-### B. Competitive Plasticity (Cognitive Dissonance)
-When new information about an entity is received, Raiven applies a small decay (`-0.5`) to all existing relationships for that entity.
-*   **Reinforcement:** If the new info matches existing patterns, the weight is increased (+1.0), overcoming the decay.
-*   **Contradiction/Neglect:** If the info is not reinforced, the connections continue to weaken until they are pruned.
+### Primary Tools:
+*   **`add_memory(text, entities)`**: Immediate ingestion. Accepting client-side entities for optimization.
+*   **`retrieve_memory(query)`**: Holographic recall (Hybrid search).
+*   **`query_knowledge_graph(cypher)`**: Direct Cypher access for high-speed relational queries (Bypasses Ollama).
+*   **`chat_with_memory(prompt)`**: Intelligent reasoning over memory with dissonance warnings.
+*   **`update_memory_chunk(chunk_id, new_text)`**: Direct memory editing.
+*   **`resolve_dissonance(chunk_id, resolution)`**: Human-in-the-loop conflict resolution.
+*   **`trigger_consolidation()`**: Forces immediate metabolic processing.
 
 ---
 

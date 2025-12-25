@@ -27,5 +27,6 @@ ENV RAIVEN_NEO4J_PASSWORD=${RAIVEN_NEO4J_PASSWORD}
 ARG RAIVEN_OLLAMA_API_KEY
 ENV RAIVEN_OLLAMA_API_KEY=${RAIVEN_OLLAMA_API_KEY}
 
-# Specify the entrypoint
-ENTRYPOINT ["python", "/app/src/raiven_mcp.py"]
+# By default run the MCP server, but allow overriding to run metabolism
+ENTRYPOINT ["python"]
+CMD ["/app/src/raiven_mcp.py"]

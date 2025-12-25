@@ -49,9 +49,16 @@ brain._query_neo4j("MATCH (n) DETACH DELETE n")
 
 ## System Maintenance
 
-The **RAPTOR** process (summarization) triggers automatically every 5 chunks by default. For high-volume ingestion, it is recommended to monitor the `:Summary` node creation in the Neo4j Browser:
+The system uses a **Subconscious Metabolism** process (`raiven-metabolism`) to handle background tasks:
+1.  **Embedding Generation**: Converts text chunks into vector embeddings.
+2.  **Cognitive Dissonance Analysis**: Flags potential contradictions between new and existing memories.
+3.  **RAPTOR Summarization**: Automatically consolidates recent memories into higher-level abstract summaries.
 
-```cypher
-MATCH (s:Summary)-[:SUMMARIZES]->(c:Chunk)
-RETURN s, c
-```
+### Running the Metabolism
+In the production environment, the metabolism is managed as a **NixOS Systemd Service**.
+
+*   **Check Status**: `systemctl status raiven-metabolism`
+*   **Restart Service**: `systemctl restart raiven-metabolism`
+*   **Monitor Logs**: `journalctl -u raiven-metabolism -f`
+
+**Note:** The metabolism is intentionally slow to preserve CPU/GPU resources for the active session. If you ingest a large amount of data, it may take several minutes to see updates in the RAPTOR tree.
