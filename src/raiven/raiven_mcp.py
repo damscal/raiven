@@ -434,11 +434,54 @@ def list_memory_profiles() -> str:
 @mcp.tool()
 def switch_memory_profile(profile_name: str) -> str:
     """
-    Switch the active memory profile (database). 
+    Switch the active memory profile (database).
     Note: In Community Edition, switching is disabled as only one database exists.
     """
     logger.debug(f"Tool switch_memory_profile called with profile: {profile_name}")
     return "Error: Database switching is not supported in Neo4j Community Edition. Only one memory profile ('neo4j') is available."
+
+# Mapping of tool names to functions for batch execution
+tool_functions = {
+    "check_metabolism": check_metabolism,
+    "start_recording": start_recording,
+    "stop_recording": stop_recording,
+    "log_chat_message": log_chat_message,
+    "add_memory": add_memory,
+    "retrieve_memory": retrieve_memory,
+    "chat_with_memory": chat_with_memory,
+    "update_memory_chunk": update_memory_chunk,
+    "resolve_dissonance": resolve_dissonance,
+    "forget_memory": forget_memory,
+    "trigger_consolidation": trigger_consolidation,
+    "query_knowledge_graph": query_knowledge_graph,
+    "get_session_logs": get_session_logs,
+    "list_memory_profiles": list_memory_profiles,
+    "switch_memory_profile": switch_memory_profile,
+}
+
+@mcp.tool()
+def batch_tools(tool_calls: list[dict]) -> str:
+    """
+    Execute multiple MCP tools in a single call to improve efficiency.
+
+    Args:
+        tool_calls: List of dictionaries, each containing 'tool' (str) and 'args' (dict).
+    """
+    logger.debug(f"Tool batch_tools called with {len(tool_calls)} calls")
+    results = []
+    for call in tool_calls:
+        tool_name = call.get('tool')
+        args = call.get('args', {})
+        if tool_name not in tool_functions:
+            results.append({"tool": tool_name, "error": "Unknown tool"})
+            continue
+        try:
+            result = tool_functions[tool_name](**args)
+            results.append({"tool": tool_name, "result": result})
+        except Exception as e:
+            logger.exception(f"Error in batch tool {tool_name}")
+            results.append({"tool": tool_name, "error": str(e)})
+    return json.dumps(results)
 
 def main():
     # FastMCP automatically handles stdio transport

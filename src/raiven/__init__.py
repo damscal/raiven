@@ -143,14 +143,14 @@ class CognitiveMemory:
             "model": EMBEDDING_MODEL,
             "prompt": text
         }
-        
+
         try:
-            # Short timeout for embedding to avoid blocking the MCP server indefinitely
-            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            # Increased timeout for embedding to handle slower models
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             return response.json()["embedding"]
         except Exception as e:
-            # We log to stderr and re-raise, but the short timeout protects the MCP server
+            # We log to stderr and re-raise
             import sys
             print(f"Error calling Ollama: {e}", file=sys.stderr)
             raise
@@ -317,27 +317,44 @@ class CognitiveMemory:
     def _process_pending_embeddings(self, limit: int = 10):
         """
         Finds chunks that need embeddings, generates them, and updates Neo4j.
+        Gives up after 3 failed attempts to prevent infinite retries.
         """
         result = self._query_neo4j("""
             MATCH (c:Chunk {needs_embedding: true})
-            RETURN c.id as id, c.text as text
+            RETURN c.id as id, c.text as text, coalesce(c.failed_attempts, 0) as failed
+            ORDER BY c.timestamp ASC
             LIMIT $limit
         """, {"limit": limit})
-        
+
         rows = result["results"][0]["data"]
         for r in rows:
-            cid, text = r["row"][0], r["row"][1]
+            cid, text, failed = r["row"][0], r["row"][1], r["row"][2]
             try:
                 embedding = self._embed(text)
                 self._query_neo4j("""
                     MATCH (c:Chunk {id: $id})
-                    SET c.embedding = $emb, c.needs_embedding = false
+                    SET c.embedding = $emb, c.needs_embedding = false, c.failed_attempts = null
                 """, {"id": cid, "emb": embedding})
                 import sys
                 print(f">> Generated embedding for chunk: {cid}", file=sys.stderr)
             except Exception as e:
-                import sys
-                print(f"Error generating embedding for {cid}: {e}", file=sys.stderr)
+                failed += 1
+                if failed >= 3:
+                    # Give up after 3 attempts
+                    self._query_neo4j("""
+                        MATCH (c:Chunk {id: $id})
+                        SET c.needs_embedding = false, c.failed_attempts = $failed
+                    """, {"id": cid, "failed": failed})
+                    import sys
+                    print(f">> Gave up embedding for chunk: {cid} after {failed} attempts", file=sys.stderr)
+                else:
+                    # Increment failed count
+                    self._query_neo4j("""
+                        MATCH (c:Chunk {id: $id})
+                        SET c.failed_attempts = $failed
+                    """, {"id": cid, "failed": failed})
+                    import sys
+                    print(f"Error generating embedding for {cid}: {e} (attempt {failed})", file=sys.stderr)
 
     def _update_raptor_tree(self):
         result = self._query_neo4j("""
