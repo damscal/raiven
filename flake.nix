@@ -11,7 +11,13 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         python = pkgs.python311;
-        pythonPackages = pkgs.python311Packages;
+        pythonPackages = pkgs.python311Packages.override {
+          overrides = self: super: {
+            watchfiles = super.watchfiles.overridePythonAttrs (old: {
+              doCheck = false;
+            });
+          };
+        };
       in
       {
         packages.default = pythonPackages.buildPythonApplication {
