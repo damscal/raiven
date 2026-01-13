@@ -9,6 +9,8 @@ in {
   options.services.raiven = {
     enable = mkEnableOption "RAIVEN Holographic Cognitive Memory System";
 
+    enableMCP = mkEnableOption "RAIVEN MCP Server";
+
     package = mkOption {
       type = types.package;
       description = "The RAIVEN package to use.";
@@ -91,6 +93,35 @@ in {
           "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
           "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}"
         ] 
+        ++ (optional (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}")
+        ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}")
+        ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}")
+        ++ (optional (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}");
+      };
+
+      Install = {
+        WantedBy = [ "default.target" ];
+      };
+    };
+
+    systemd.user.services.raiven-mcp = mkIf cfg.enableMCP {
+      Unit = {
+        Description = "RAIVEN MCP Server";
+        After = [ "network.target" ];
+      };
+
+      Service = {
+        ExecStart = "${cfg.package}/bin/raiven-mcp";
+        Restart = "on-failure";
+        WorkingDirectory = "${config.home.homeDirectory}";
+        Environment = [
+          "PYTHONUNBUFFERED=1"
+          "RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}"
+          "RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}"
+          "RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}"
+          "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
+          "RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}"
+        ]
         ++ (optional (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}")
         ++ (optional (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}")
         ++ (optional (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}")
