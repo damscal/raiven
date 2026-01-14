@@ -13,7 +13,34 @@
         python = pkgs.python311;
         pythonPackages = pkgs.python311Packages.override {
           overrides = self: super: {
+            # Disable tests for packages that cause expensive checks during rebuilds
             watchfiles = super.watchfiles.overridePythonAttrs (old: {
+              doCheck = false;
+            });
+            
+            # Additional Python packages that might have expensive tests
+            neo4j = super.neo4j.overridePythonAttrs (oldAttrs: {
+              doCheck = false;
+            });
+            
+            requests = super.requests.overridePythonAttrs (oldAttrs: {
+              doCheck = false;
+            });
+            
+            numpy = super.numpy.overridePythonAttrs (oldAttrs: {
+              doCheck = false;
+            });
+            
+            mcp = super.mcp.overridePythonAttrs (oldAttrs: {
+              doCheck = false;
+            });
+            
+            websockets = super.websockets.overridePythonAttrs (oldAttrs: {
+              doCheck = false;
+            });
+            
+            # Additional packages that might have expensive tests
+            setuptools = super.setuptools.overridePythonAttrs (oldAttrs: {
               doCheck = false;
             });
           };
