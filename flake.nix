@@ -67,13 +67,17 @@
           name = "raiven-mcp";
           tag = "latest";
           
-          contents = [
-            pkgs.cacert
-            pkgs.coreutils
-            pkgs.bash
-            pkgs.dockerTools.caCertificates
-            pkgs.python311
-          ];
+          copyToRoot = pkgs.buildEnv {
+            name = "raiven-mcp-docker-root";
+            paths = [
+              pkgs.cacert
+              pkgs.coreutils
+              pkgs.bash
+              pkgs.dockerTools.caCertificates
+              pkgs.python311
+            ];
+            pathsToLink = [ "/" ];
+          };
           
           config = {
             Cmd = [
