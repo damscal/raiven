@@ -96,7 +96,7 @@ in {
           "https://cache.nixos.org/"
         ];
         # Allow fallback to binary caches to avoid building from source when possible
-        "substitute-on-destination" = true;
+        "builders-use-substitutes" = true;  # Enable substituters on remote build machines when possible
         # Increase allowed size to prevent premature garbage collection
         "gc-reserved-space" = 1073741824; # 1GB reserved space
       };
