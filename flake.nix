@@ -72,15 +72,6 @@
           ];
         };
         
-        # Create a Python environment with raiven and all its dependencies
-        raivenPythonEnv = pkgs.python311.withPackages (ps: [
-          raivenPackage
-          ps.requests
-          ps.neo4j
-          ps.numpy
-          ps.mcp
-        ]);
-        
         packages.raiven-docker-image = pkgs.dockerTools.buildImage {
           name = "raiven-mcp";
           tag = "latest";
@@ -92,14 +83,14 @@
               pkgs.coreutils
               pkgs.bash
               pkgs.dockerTools.caCertificates
-              raivenPythonEnv
+              raivenPackage  # This includes the executable
             ];
             pathsToLink = [ "/" ];
           };
           
           config = {
             Cmd = [
-              "${raivenPythonEnv}/bin/raiven-mcp"
+              "${raivenPackage}/bin/raiven-mcp"
             ];
             Env = [ "PYTHONUNBUFFERED=1" ];
           };
