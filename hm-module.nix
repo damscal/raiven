@@ -80,6 +80,27 @@ in {
 
   config = mkIf cfg.enable {
     home.packages = [ cfg.package ];
+    
+    # Optimize nix settings for low-end systems
+    nix = {
+      settings = {
+        # Limit parallel builds to prevent overwhelming low-end systems
+        cores = 1;
+        # Increase the timeout for builds on slower systems
+        timeout = 3600;
+        # Enable substituters for faster package acquisition
+        "trusted-public-keys" = [
+          "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+        ];
+        "trusted-substituters" = [
+          "https://cache.nixos.org/"
+        ];
+        # Allow fallback to binary caches to avoid building from source when possible
+        "substitute-on-destination" = true;
+        # Increase allowed size to prevent premature garbage collection
+        "gc-reserved-space" = 1073741824; # 1GB reserved space
+      };
+    };
 
     systemd.user.services.raiven = {
       Unit = {
