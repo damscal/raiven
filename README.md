@@ -71,3 +71,38 @@ Secret files are read by the application, and paths can contain `~` which will b
 - `implementation guide.md`: Technical details of the HCMS architecture.
 - `USAGE.md`: Detailed usage instructions.
 - `CONTRIBUTING.md`: Guidelines for contributing to the project.
+- `CONTAINERIZED_MCP_SERVER.md`: Documentation for the containerized MCP server feature.
+
+## Home Manager Integration
+
+The Raiven project includes a Home Manager module that allows you to run the MCP server automatically as a user service. The module provides several options:
+
+### Containerized MCP Server
+
+The module now includes support for running the MCP server in a containerized environment:
+
+- `services.raiven.enableContainerMCP`: Enables the containerized Raiven MCP server systemd service
+- `services.raiven.containerRuntime`: Selects the container runtime ("podman" or "docker"), defaults to "podman"
+
+Example configuration:
+```nix
+{
+ services.raiven = {
+   enableContainerMCP = true;  # Enable the containerized MCP server
+   containerRuntime = "podman"; # Optional: defaults to "podman", can be "docker"
+   package = pkgs.raiven;      # Raiven package with Docker image
+   config = {
+     neo4j = {
+       uri = "bolt://localhost:7687";
+       user = "neo4j";
+       passwordFile = "/path/to/password/file";
+     };
+     ollama = {
+       host = "http://localhost:11434";
+     };
+   };
+ };
+}
+```
+
+The containerized service automatically manages the Docker image, loading it from the Nix store and running it with the appropriate environment configuration.
