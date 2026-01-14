@@ -18,15 +18,14 @@
             });
           };
         };
-      in
-      {
-        packages.default = pythonPackages.buildPythonApplication {
+        
+        raivenPackage = pythonPackages.buildPythonApplication {
           pname = "raiven";
           version = "0.1.0";
           src = ./.;
           format = "pyproject";
 
-          # Dependency management: 
+          # Dependency management:
           # We use the packages provided by nixpkgs to ensure compatibility
           propagatedBuildInputs = [
             pythonPackages.neo4j
@@ -46,10 +45,11 @@
             platforms = platforms.all;
           };
         };
-
+      in
+      {
         apps.default = {
           type = "app";
-          program = "${self.packages.${system}.default}/bin/raiven";
+          program = "${self.packages.${system}.raiven-docker-image}/bin/raiven";
         };
 
         devShells.default = pkgs.mkShell {
@@ -62,6 +62,35 @@
             ]))
           ];
         };
+        
+        packages.raiven-docker-image = pkgs.dockerTools.buildImage {
+          name = "raiven-mcp";
+          tag = "latest";
+          
+          contents = [
+            pkgs.cacert
+            pkgs.coreutils
+            pkgs.bash
+            pkgs.dockerTools.caCertificates
+            pkgs.python311
+          ];
+          
+          config = {
+            Cmd = [
+              "${pkgs.python311.interpreter}"
+              "-c"
+              "import sys; sys.path.insert(0, '${raivenPackage}/lib/python3.11/site-packages'); from raiven.raiven_mcp import main; main()"
+            ];
+            Env = [ "PYTHONUNBUFFERED=1" ];
+          };
+        };
+        
+        # Create the default package with Docker image in passthru
+        packages.default = raivenPackage.overrideAttrs (oldAttrs: {
+          passthru = (oldAttrs.passthru or {}) // {
+            dockerImage = self.packages.${system}.raiven-docker-image;
+          };
+        });
       }) // {
         homeManagerModules.default = import ./hm-module.nix;
       };

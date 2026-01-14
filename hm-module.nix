@@ -125,10 +125,14 @@ in {
         }
         (mkIf (cfg.containerRuntime == "podman") {
           ExecStart = pkgs.writeShellScript "raiven-container-mcp-podman" ''
-            # Build the image if it doesn't exist
-            if ! ${pkgs.podman}/bin/podman images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
-              echo "Building raiven-mcp image with podman..."
-              cd ${config.home.homeDirectory}/raiven && ${pkgs.podman}/bin/podman build -t raiven-mcp .
+            # Load the pre-built Docker image into podman
+            # Import the image from the nix store using the package's passthru
+            if ! ${pkgs.podman}/bin/podman image exists raiven-mcp:latest; then
+              echo "Loading raiven-mcp:latest image into podman..."
+              ${pkgs.podman}/bin/podman load -i ${cfg.package.passthru.dockerImage} > /dev/null 2>&1 || {
+                echo "Failed to load Docker image"
+                exit 1
+              }
             fi
             
             # Run the container with proper stdio forwarding
@@ -149,10 +153,13 @@ in {
         })
         (mkIf (cfg.containerRuntime == "docker") {
           ExecStart = pkgs.writeShellScript "raiven-container-mcp-docker" ''
-            # Build the image if it doesn't exist
+            # Load the pre-built Docker image if it doesn't exist
             if ! ${pkgs.docker}/bin/docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
-              echo "Building raiven-mcp image with docker..."
-              cd ${config.home.homeDirectory}/raiven && ${pkgs.docker}/bin/docker build -t raiven-mcp .
+              echo "Loading raiven-mcp:latest image into docker..."
+              ${pkgs.docker}/bin/docker load < ${cfg.package.passthru.dockerImage} > /dev/null 2>&1 || {
+                echo "Failed to load Docker image"
+                exit 1
+              }
             fi
             
             # Run the container with proper stdio forwarding
