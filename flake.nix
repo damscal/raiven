@@ -9,7 +9,7 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        # Optimize for low-end systems by reducing parallel builds and memory usage
+        # Use the imported nixpkgs to optimize for low-end systems
         # This configuration helps prevent build failures on systems with limited resources
         pkgs = import nixpkgs {
           inherit system;
@@ -20,9 +20,8 @@
           };
           overlays = [];
         };
-        python = pkgs.python311;
-        pkgs = nixpkgs.legacyPackages.${system};
-        python = pkgs.python311;
+        
+        # Define optimized Python packages with disabled tests
         pythonPackages = pkgs.python311Packages.override {
           overrides = self: super: {
             # Disable tests to speed up rebuilds
@@ -60,6 +59,7 @@
             });
           };
         };
+        python = pkgs.python311;
         
         raivenPackage = pythonPackages.buildPythonApplication {
           pname = "raiven";
@@ -87,8 +87,6 @@
             pythonPackages.curio
           ];
 
-          # Disable tests if they require remote services or complex setup
-          doCheck = false;
 
           # Additional optimizations for low-end systems
           nativeBuildInputs = with pkgs; [
@@ -113,11 +111,6 @@
         # Create a Python environment with raiven and all its optimized dependencies
         raivenPythonEnv = pythonPackages.withPackages (ps: [
           raivenPackage
-          ps.requests
-          ps.neo4j
-          ps.numpy
-          ps.mcp
-          ps.curio
         ]);
       in
       {
@@ -127,14 +120,13 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = [
-            (pythonPackages.withPackages (ps: with ps; [
-              ps.neo4j
-              ps.requests
-              ps.numpy
-              ps.setuptools
-              ps.curio
-            ]))
+          buildInputs = with pythonPackages; [
+            python
+            neo4j
+            requests
+            numpy
+            setuptools
+            curio
           ];
         };
         
