@@ -117,36 +117,61 @@ in {
         Requires = [ "${cfg.containerRuntime}.socket" ];
       };
 
-      Service = {
-        Type = "exec";
-        ExecStart = pkgs.writeShellScript "raiven-container-mcp" ''
-          CONTAINER_RUNTIME="${cfg.containerRuntime}"
-          RUNTIME_CMD="${if cfg.containerRuntime == "podman" then pkgs.podman else pkgs.docker}/bin/${cfg.containerRuntime}"
-          
-          # Build the image if it doesn't exist
-          if ! $RUNTIME_CMD images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
-            echo "Building raiven-mcp image with $CONTAINER_RUNTIME..."
-            cd ${config.home.homeDirectory}/raiven && $RUNTIME_CMD build -t raiven-mcp .
-          fi
-          
-          # Run the container with proper stdio forwarding
-          exec $RUNTIME_CMD run -i --rm \
-            --env-file ${pkgs.writeText "raiven-env" ''
-              RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}
-              RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}
-              RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}
-              RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}
-              RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}
-              ${optionalString (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}"}
-              ${optionalString (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}"}
-              ${optionalString (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}"}
-              ${optionalString (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}"}
-            ''} \
-            raiven-mcp
-        '';
-        Restart = "on-failure";
-        WorkingDirectory = "${config.home.homeDirectory}";
-      };
+      Service = mkMerge [
+        {
+          Type = "exec";
+          Restart = "on-failure";
+          WorkingDirectory = "${config.home.homeDirectory}";
+        }
+        (mkIf (cfg.containerRuntime == "podman") {
+          ExecStart = pkgs.writeShellScript "raiven-container-mcp-podman" ''
+            # Build the image if it doesn't exist
+            if ! ${pkgs.podman}/bin/podman images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
+              echo "Building raiven-mcp image with podman..."
+              cd ${config.home.homeDirectory}/raiven && ${pkgs.podman}/bin/podman build -t raiven-mcp .
+            fi
+            
+            # Run the container with proper stdio forwarding
+            exec ${pkgs.podman}/bin/podman run -i --rm \
+              --env-file ${pkgs.writeText "raiven-env" ''
+                RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}
+                RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}
+                RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}
+                RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}
+                RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}
+                ${optionalString (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}"}
+                ${optionalString (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}"}
+                ${optionalString (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}"}
+                ${optionalString (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}"}
+              ''} \
+              raiven-mcp
+          '';
+        })
+        (mkIf (cfg.containerRuntime == "docker") {
+          ExecStart = pkgs.writeShellScript "raiven-container-mcp-docker" ''
+            # Build the image if it doesn't exist
+            if ! ${pkgs.docker}/bin/docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
+              echo "Building raiven-mcp image with docker..."
+              cd ${config.home.homeDirectory}/raiven && ${pkgs.docker}/bin/docker build -t raiven-mcp .
+            fi
+            
+            # Run the container with proper stdio forwarding
+            exec ${pkgs.docker}/bin/docker run -i --rm \
+              --env-file ${pkgs.writeText "raiven-env" ''
+                RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}
+                RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}
+                RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}
+                RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}
+                RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}
+                ${optionalString (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}"}
+                ${optionalString (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}"}
+                ${optionalString (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}"}
+                ${optionalString (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}"}
+              ''} \
+              raiven-mcp
+          '';
+        })
+      ];
 
       Install = {
         WantedBy = [ "default.target" ];
