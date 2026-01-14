@@ -74,16 +74,14 @@
               pkgs.coreutils
               pkgs.bash
               pkgs.dockerTools.caCertificates
-              pkgs.python311
+              raivenPackage
             ];
             pathsToLink = [ "/" ];
           };
           
           config = {
             Cmd = [
-              "${pkgs.python311.interpreter}"
-              "-c"
-              "import sys; sys.path.insert(0, '${raivenPackage}/lib/python3.11/site-packages'); from raiven.raiven_mcp import main; main()"
+              "${raivenPackage}/bin/raiven-mcp"
             ];
             Env = [ "PYTHONUNBUFFERED=1" ];
           };
