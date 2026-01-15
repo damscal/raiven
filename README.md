@@ -83,6 +83,7 @@ The module now includes support for running the MCP server in a containerized en
 
 - `services.raiven.enableContainerMCP`: Enables the containerized Raiven MCP server systemd service
 - `services.raiven.containerRuntime`: Selects the container runtime ("podman" or "docker"), defaults to "podman"
+- `services.raiven.dockerImagePackage`: The Docker image package to use for the containerized MCP server
 
 Example configuration:
 ```nix
@@ -90,7 +91,8 @@ Example configuration:
  services.raiven = {
    enableContainerMCP = true;  # Enable the containerized MCP server
    containerRuntime = "podman"; # Optional: defaults to "podman", can be "docker"
-   package = pkgs.raiven;      # Raiven package with Docker image
+   package = inputs.raiven.packages.x86_64-linux.default;      # Raiven package
+   dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image; # Docker image package
    config = {
      neo4j = {
        uri = "bolt://localhost:7687";

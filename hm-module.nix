@@ -22,6 +22,11 @@ in {
       description = "The RAIVEN package to use.";
     };
 
+    dockerImagePackage = mkOption {
+      type = types.package;
+      description = "The RAIVEN Docker image package to use for containerized MCP.";
+    };
+
     config = {
       neo4j = {
         uri = mkOption {
@@ -150,7 +155,7 @@ in {
             # Import the image from the nix store using the package's passthru
             if ! ${pkgs.podman}/bin/podman image exists raiven-mcp:latest; then
               echo "Loading raiven-mcp:latest image into podman..."
-              ${pkgs.podman}/bin/podman load -i ${cfg.package.passthru.dockerImage} > /dev/null 2>&1 || {
+              ${pkgs.podman}/bin/podman load -i ${cfg.dockerImagePackage} > /dev/null 2>&1 || {
                 echo "Failed to load Docker image"
                 exit 1
               }
@@ -177,7 +182,7 @@ in {
             # Load the pre-built Docker image if it doesn't exist
             if ! ${pkgs.docker}/bin/docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
               echo "Loading raiven-mcp:latest image into docker..."
-              ${pkgs.docker}/bin/docker load < ${cfg.package.passthru.dockerImage} > /dev/null 2>&1 || {
+              ${pkgs.docker}/bin/docker load < ${cfg.dockerImagePackage} > /dev/null 2>&1 || {
                 echo "Failed to load Docker image"
                 exit 1
               }

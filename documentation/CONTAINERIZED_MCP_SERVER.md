@@ -32,7 +32,12 @@ Selects the container runtime to use for the Raiven MCP server.
 ### `services.raiven.package`
 
 - **Type**: Package
-- **Description**: The Raiven package to use, which should include the pre-built Docker image in its passthru attributes.
+- **Description**: The Raiven package to use.
+
+### `services.raiven.dockerImagePackage`
+
+- **Type**: Package
+- **Description**: The RAIVEN Docker image package to use for containerized MCP.
 
 ## How to Use
 
@@ -44,7 +49,8 @@ To enable the containerized MCP server with default settings (using Podman):
 {
   services.raiven = {
     enableContainerMCP = true;
-    package = pkgs.raiven;
+    package = inputs.raiven.packages.x86_64-linux.default;  # Replace with your system architecture
+    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
     config = {
       neo4j = {
         uri = "bolt://localhost:7687";
@@ -59,6 +65,8 @@ To enable the containerized MCP server with default settings (using Podman):
 }
 ```
 
+**Note**: Replace `x86_64-linux` with your actual system architecture (e.g., `aarch64-linux`, `x86_64-darwin`, etc.).
+
 ### Using Docker Instead of Podman
 
 To use Docker instead of the default Podman:
@@ -68,7 +76,8 @@ To use Docker instead of the default Podman:
   services.raiven = {
     enableContainerMCP = true;
     containerRuntime = "docker";
-    package = pkgs.raiven;
+    package = inputs.raiven.packages.x86_64-linux.default;
+    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
     config = {
       # ... your configuration
     };
@@ -81,12 +90,13 @@ To use Docker instead of the default Podman:
 Here's a complete example showing how to integrate the containerized MCP server in your Home Manager configuration:
 
 ```nix
-{ pkgs, ... }: {
+{ inputs, ... }: {
   services.raiven = {
     enableContainerMCP = true;
     containerRuntime = "podman"; # Default, can be omitted
-    package = pkgs.callPackage ./path-to-raiven-package {};
-    
+    package = inputs.raiven.packages.x86_64-linux.default;
+    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
+
     config = {
       neo4j = {
         uri = "bolt://neo4j-server:7687";
@@ -94,7 +104,7 @@ Here's a complete example showing how to integrate the containerized MCP server 
         user = "neo4j";
         passwordFile = "~/.local/share/raiven/neo4j-password";
       };
-      
+
       ollama = {
         host = "http://ollama-server:11434";
         apiKeyFile = "~/.local/share/raiven/ollama-api-key";
@@ -105,9 +115,9 @@ Here's a complete example showing how to integrate the containerized MCP server 
       };
     };
   };
-  
+
   # Make sure to add the raiven package to your environment
-  home.packages = [ pkgs.raiven ];
+  home.packages = [ inputs.raiven.packages.x86_64-linux.default ];
 }
 ```
 
@@ -115,7 +125,7 @@ Here's a complete example showing how to integrate the containerized MCP server 
 
 1. When `enableContainerMCP` is set to `true`, the module creates a systemd user service named `raiven-container-mcp.service`.
 
-2. The service automatically loads the pre-built Docker image from the Raiven package's `passthru.dockerImage` attribute.
+2. The service automatically loads the pre-built Docker image from the specified `dockerImagePackage`.
 
 3. The service runs the container with the proper environment variables configured based on your `services.raiven.config` settings.
 
@@ -147,7 +157,7 @@ journalctl --user -u raiven-container-mcp -f
 ### Image Loading Issues
 
 If the image fails to load, ensure that:
-1. The Raiven package was built with the Docker image in its passthru attributes
+1. The `dockerImagePackage` option is correctly set to the Raiven Docker image package
 2. The container runtime (Podman/Docker) is properly installed and accessible
 3. The user has permissions to run containers
 
