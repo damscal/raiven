@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 
 with lib;
+with builtins;
 
 let
   cfg = config.services.raiven;
@@ -66,6 +67,12 @@ in {
             description = "Vector dimensions for the embedding model.";
           };
         };
+      };
+
+      mcpClients = mkOption {
+        type = types.listOf (types.enum ["roo-code" "cline" "vscode" "cursor"]);
+        default = [];
+        description = "List of MCP clients to automatically configure with the Raiven MCP server.";
       };
     };
   };
@@ -166,6 +173,106 @@ in {
         WantedBy = [ "default.target" ];
       };
     };
+
+    # Periodic cleanup service for orphaned containers
+    systemd.user.services.raiven-container-cleanup = {
+      Unit = {
+        Description = "Clean up orphaned Raiven MCP containers";
+      };
+
+      Service = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeShellScript "raiven-container-cleanup" ''
+          echo "Cleaning up orphaned Raiven MCP containers..."
+
+          # Clean up podman containers
+          if command -v podman >/dev/null 2>&1; then
+            # Remove exited containers from raiven-mcp image
+            podman rm $(podman ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter status=exited 2>/dev/null) 2>/dev/null || true
+            # Remove containers that have been running for more than 1 hour (likely orphaned)
+            podman rm $(podman ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}} {{.Created}}" | awk '$2 < "'$(date -d '1 hour ago' +%s)'" {print $1}' 2>/dev/null) 2>/dev/null || true
+          fi
+
+          # Clean up docker containers
+          if command -v docker >/dev/null 2>&1; then
+            # Remove exited containers from raiven-mcp image
+            docker rm $(docker ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter status=exited 2>/dev/null) 2>/dev/null || true
+            # Remove containers that have been running for more than 1 hour (likely orphaned)
+            docker rm $(docker ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}} {{.CreatedAt}}" | awk '$2 < "'$(date -d '1 hour ago' +%s)'" {print $1}' 2>/dev/null) 2>/dev/null || true
+          fi
+
+          echo "Raiven MCP container cleanup complete"
+        '';
+      };
+    };
+
+    # Timer to run cleanup periodically
+    systemd.user.timers.raiven-container-cleanup = {
+      Unit = {
+        Description = "Run Raiven MCP container cleanup periodically";
+      };
+
+      Timer = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "30min";
+        Persistent = true;
+      };
+
+      Install = {
+        WantedBy = [ "timers.target" ];
+      };
+    };
+
+    # MCP client configuration
+    home.file = mkMerge (map (client:
+      let
+        configDir = {
+          "roo-code" = ".config/rooveterinaryinc.roo-cline";
+          "cline" = ".config/cline";
+          "vscode" = ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline";
+          "cursor" = ".config/cursor";
+        }.${client} or (throw "Unsupported MCP client: ${client}");
+
+        mcpConfig = {
+          mcpServers = {
+            raiven = {
+              command = "podman";
+              args = [
+                "run"
+                "-i"
+                "--rm"
+                "-e" "RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}"
+                "-e" "RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}"
+                "-e" "RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}"
+                "-e" "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
+                "localhost/raiven-mcp:latest"
+              ];
+              env = {
+                "RAIVEN_NEO4J_URI" = cfg.config.neo4j.uri;
+                "RAIVEN_NEO4J_USER" = cfg.config.neo4j.user;
+                "RAIVEN_OLLAMA_HOST" = cfg.config.ollama.host;
+                "RAIVEN_OLLAMA_MODEL" = cfg.config.ollama.model.name;
+                "RAIVEN_VECTOR_DIMENSIONS" = toString cfg.config.ollama.model.vectorDimensions;
+              } // (optionalAttrs (cfg.config.neo4j.passwordFile != null) {
+                "RAIVEN_NEO4J_PASSWORD_FILE" = toEnvValue cfg.config.neo4j.passwordFile;
+              }) // (optionalAttrs (cfg.config.neo4j.apiKeyFile != null) {
+                "RAIVEN_NEO4J_API_KEY_FILE" = toEnvValue cfg.config.neo4j.apiKeyFile;
+              }) // (optionalAttrs (cfg.config.ollama.apiKeyFile != null) {
+                "RAIVEN_OLLAMA_API_KEY_FILE" = toEnvValue cfg.config.ollama.apiKeyFile;
+              });
+              disabled = false;
+              alwaysAllow = [];
+              disabledTools = [];
+            };
+          };
+        };
+      in {
+        "${configDir}/settings/mcp_settings.json" = {
+          text = builtins.toJSON mcpConfig;
+          force = true;
+        };
+      }
+    ) cfg.config.mcpClients);
 
   };
 }

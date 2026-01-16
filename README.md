@@ -109,3 +109,16 @@ The Home Manager module provides package installation and automatically builds a
 ```
 
 The `raiven-docker-setup` service runs automatically during Home Manager activation to build and load the latest `raiven-mcp:latest` image into your container runtime.
+
+Additionally, the module includes a periodic cleanup service (`raiven-container-cleanup`) that runs every 30 minutes and on boot to remove orphaned containers from previous MCP server sessions. This prevents accumulation of stopped containers and ensures clean system state.
+
+### MCP Client Integration
+
+The Home Manager module can automatically configure the Raiven MCP server for supported MCP clients. Set the `mcpClients` option to a list of clients you want to configure:
+
+- `"roo-code"`: Roo Code
+- `"cline"`: Cline
+- `"vscode"`: VS Code with Roo Code extension
+- `"cursor"`: Cursor
+
+When enabled, the module will create the appropriate MCP configuration files for each selected client, automatically setting up environment variables and secret file paths.
