@@ -116,9 +116,7 @@ Additionally, the module includes a periodic cleanup service (`raiven-container-
 
 The Home Manager module can automatically configure the Raiven MCP server for supported MCP clients. Set the `mcpClients` option to a list of clients you want to configure:
 
-- `"roo-code"`: Roo Code
-- `"cline"`: Cline
-- `"vscode"`: VS Code with Roo Code extension
-- `"cursor"`: Cursor
+- `"roo-code"`: Roo Code on VSCodium
+- `"cline"`: Cline on VSCodium
 
 When enabled, the module will create the appropriate MCP configuration files for each selected client, automatically setting up environment variables and secret file paths.
