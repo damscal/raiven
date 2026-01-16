@@ -146,7 +146,7 @@ in {
       Service = mkMerge [
         {
           Type = "exec";
-          Restart = "on-failure";
+          Restart = "no";  # MCP servers should exit when done, not restart
           WorkingDirectory = "${config.home.homeDirectory}";
         }
         (mkIf (cfg.containerRuntime == "podman") {

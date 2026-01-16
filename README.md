@@ -79,32 +79,39 @@ The Raiven project includes a Home Manager module that allows you to run the MCP
 
 ### Containerized MCP Server
 
-The module now includes support for running the MCP server in a containerized environment:
+⚠️ **Important**: MCP servers should be configured directly in your MCP client (like Roo Code), not run as systemd services. The Home Manager module provides the packages for easy installation.
 
-- `services.raiven.enableContainerMCP`: Enables the containerized Raiven MCP server systemd service
+The module includes support for installing the containerized MCP server packages:
+
+- `services.raiven.enableContainerMCP`: Installs the containerized Raiven MCP server packages (for testing only)
 - `services.raiven.containerRuntime`: Selects the container runtime ("podman" or "docker"), defaults to "podman"
 - `services.raiven.dockerImagePackage`: The Docker image package to use for the containerized MCP server
 
-Example configuration:
-```nix
+For production use, configure the Raiven MCP server in your MCP client settings:
+
+```json
 {
- services.raiven = {
-   enableContainerMCP = true;  # Enable the containerized MCP server
-   containerRuntime = "podman"; # Optional: defaults to "podman", can be "docker"
-   package = inputs.raiven.packages.x86_64-linux.default;      # Raiven package
-   dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image; # Docker image package
-   config = {
-     neo4j = {
-       uri = "bolt://localhost:7687";
-       user = "neo4j";
-       passwordFile = "/path/to/password/file";
-     };
-     ollama = {
-       host = "http://localhost:11434";
-     };
-   };
- };
+  "mcpServers": {
+    "raiven": {
+      "command": "podman",
+      "args": ["run", "-i", "--rm", "localhost/raiven-mcp:latest"],
+      "env": {
+        "RAIVEN_NEO4J_URI": "bolt://localhost:7687",
+        "RAIVEN_OLLAMA_HOST": "http://localhost:11434"
+      }
+    }
+  }
 }
 ```
 
-The containerized service automatically manages the Docker image, loading it from the Nix store and running it with the appropriate environment configuration.
+Example Home Manager configuration for package installation:
+```nix
+{
+ services.raiven = {
+   enableContainerMCP = true;  # Installs packages (systemd service for testing only)
+   containerRuntime = "podman";
+   package = inputs.raiven.packages.x86_64-linux.default;
+   dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
+ };
+}
+```

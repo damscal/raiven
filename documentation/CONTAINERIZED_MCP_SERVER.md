@@ -4,7 +4,9 @@ The Raiven project now includes a feature to automatically run the MCP server in
 
 ## Overview
 
-The containerized MCP server feature enables users to run the Raiven MCP server inside a Docker/Podman container through a Home Manager module. This provides several advantages:
+The containerized MCP server feature enables users to run the Raiven MCP server inside a Docker/Podman container. **Important**: MCP servers are designed to be launched on-demand by MCP clients (like Roo Code) and should not run as persistent services. The Home Manager module provides the packages and configuration, but the actual server execution should be handled by your MCP client.
+
+This approach provides several advantages:
 
 - Isolated execution environment
 - Consistent deployment across different systems
@@ -39,11 +41,37 @@ Selects the container runtime to use for the Raiven MCP server.
 - **Type**: Package
 - **Description**: The RAIVEN Docker image package to use for containerized MCP.
 
+## ⚠️ Important Usage Note
+
+**MCP servers should be configured in your MCP client (like Roo Code), not run as systemd services.** The Home Manager module provides the packages and Docker images, but the actual server execution should be handled by your MCP client for on-demand launching.
+
+The systemd service option is provided for testing purposes only and will create containers that exit immediately since there's no client connection.
+
 ## How to Use
 
-### Basic Configuration
+### Recommended: Configure in MCP Client
 
-To enable the containerized MCP server with default settings (using Podman):
+For production use, configure the Raiven MCP server directly in your MCP client (Roo Code) settings:
+
+```json
+{
+  "mcpServers": {
+    "raiven": {
+      "command": "podman",
+      "args": ["run", "-i", "--rm", "localhost/raiven-mcp:latest"],
+      "env": {
+        "RAIVEN_NEO4J_URI": "bolt://localhost:7687",
+        "RAIVEN_NEO4J_USER": "neo4j",
+        "RAIVEN_OLLAMA_HOST": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+### Home Manager Configuration (for Package Installation)
+
+To install the necessary packages via Home Manager:
 
 ```nix
 {
@@ -85,9 +113,11 @@ To use Docker instead of the default Podman:
 }
 ```
 
-### Complete Example
+### Testing with Systemd Service (Not Recommended for Production)
 
-Here's a complete example showing how to integrate the containerized MCP server in your Home Manager configuration:
+⚠️ **Warning**: The systemd service approach is for testing only. It will create containers that exit immediately since MCP servers require client connections.
+
+If you still want to test with systemd (not recommended):
 
 ```nix
 { inputs, ... }: {
