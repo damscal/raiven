@@ -81,12 +81,6 @@ The Raiven project includes a Home Manager module that allows you to run the MCP
 
 ⚠️ **Important**: MCP servers should be configured directly in your MCP client (like Roo Code), not run as systemd services. The Home Manager module provides the packages for easy installation.
 
-The module includes support for installing the containerized MCP server packages:
-
-- `services.raiven.enableContainerMCP`: Installs the containerized Raiven MCP server packages (for testing only)
-- `services.raiven.containerRuntime`: Selects the container runtime ("podman" or "docker"), defaults to "podman"
-- `services.raiven.dockerImagePackage`: The Docker image package to use for the containerized MCP server
-
 For production use, configure the Raiven MCP server in your MCP client settings:
 
 ```json
@@ -104,14 +98,14 @@ For production use, configure the Raiven MCP server in your MCP client settings:
 }
 ```
 
-Example Home Manager configuration for package installation:
+The Home Manager module provides package installation and automatically builds and loads the Docker image:
 ```nix
 {
  services.raiven = {
-   enableContainerMCP = true;  # Installs packages (systemd service for testing only)
-   containerRuntime = "podman";
+   enable = true;
    package = inputs.raiven.packages.x86_64-linux.default;
-   dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
  };
 }
 ```
+
+The `raiven-docker-setup` service runs automatically during Home Manager activation to build and load the latest `raiven-mcp:latest` image into your container runtime.

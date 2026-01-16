@@ -1,10 +1,10 @@
 # Containerized MCP Server Feature
 
-The Raiven project now includes a feature to automatically run the MCP server in a containerized environment using either Podman or Docker. This allows for better isolation and easier deployment while maintaining all the functionality of the Raiven MCP server.
+The Raiven project provides a containerized MCP server that can be run using either Podman or Docker. This allows for better isolation and easier deployment while maintaining all the functionality of the Raiven MCP server.
 
 ## Overview
 
-The containerized MCP server feature enables users to run the Raiven MCP server inside a Docker/Podman container. **Important**: MCP servers are designed to be launched on-demand by MCP clients (like Roo Code) and should not run as persistent services. The Home Manager module provides the packages and configuration, but the actual server execution should be handled by your MCP client.
+**Important**: MCP servers are designed to be launched on-demand by MCP clients (like Roo Code) and should not run as persistent services. The Home Manager module provides package installation, but the actual server execution should be handled by your MCP client.
 
 This approach provides several advantages:
 
@@ -13,45 +13,56 @@ This approach provides several advantages:
 - Automatic image management
 - Support for both Podman and Docker runtimes
 
-## New Configuration Options
+## Configuration
 
-### `services.raiven.enableContainerMCP`
+The Home Manager module provides package installation for the Raiven MCP server.
 
-Enables the containerized Raiven MCP server systemd service.
+### `services.raiven.enable`
+
+Enables the Raiven Home Manager module.
 
 - **Type**: Boolean
 - **Default**: `false`
-- **Description**: When set to `true`, starts the Raiven MCP server in a container using the configured container runtime.
-
-### `services.raiven.containerRuntime`
-
-Selects the container runtime to use for the Raiven MCP server.
-
-- **Type**: Enum (`"podman"` or `"docker"`)
-- **Default**: `"podman"`
-- **Description**: Specifies which container runtime to use. Podman is the default as it doesn't require a daemon and works well in user contexts.
+- **Description**: When set to `true`, installs the Raiven package.
 
 ### `services.raiven.package`
 
 - **Type**: Package
 - **Description**: The Raiven package to use.
 
-### `services.raiven.dockerImagePackage`
-
-- **Type**: Package
-- **Description**: The RAIVEN Docker image package to use for containerized MCP.
-
-## ⚠️ Important Usage Note
-
-**MCP servers should be configured in your MCP client (like Roo Code), not run as systemd services.** The Home Manager module provides the packages and Docker images, but the actual server execution should be handled by your MCP client for on-demand launching.
-
-The systemd service option is provided for testing purposes only and will create containers that exit immediately since there's no client connection.
-
 ## How to Use
 
-### Recommended: Configure in MCP Client
+### 1. Install Packages via Home Manager
 
-For production use, configure the Raiven MCP server directly in your MCP client (Roo Code) settings:
+Add the Raiven package to your Home Manager configuration:
+
+```nix
+{ inputs, ... }: {
+  services.raiven = {
+    enable = true;
+    package = inputs.raiven.packages.x86_64-linux.default;
+  };
+
+  # The package will be available in your environment
+  home.packages = [ inputs.raiven.packages.x86_64-linux.default ];
+}
+```
+
+**Note**: Replace `x86_64-linux` with your actual system architecture (e.g., `aarch64-linux`, `x86_64-darwin`, etc.).
+
+### 2. Automatic Docker Image Setup
+
+The Home Manager module automatically builds and loads the latest Raiven MCP Docker image during system activation. The `raiven-docker-setup` service will:
+
+- Always build the most recent Docker image using Nix
+- Remove any existing `raiven-mcp:latest` image
+- Load the fresh image into your container runtime (Podman or Docker)
+
+This ensures you always have the latest version of the Raiven MCP server and happens automatically when you rebuild your Home Manager configuration.
+
+### 3. Configure in MCP Client
+
+Configure the Raiven MCP server directly in your MCP client (Roo Code) settings:
 
 ```json
 {
@@ -61,146 +72,47 @@ For production use, configure the Raiven MCP server directly in your MCP client 
       "args": ["run", "-i", "--rm", "localhost/raiven-mcp:latest"],
       "env": {
         "RAIVEN_NEO4J_URI": "bolt://localhost:7687",
-        "RAIVEN_NEO4J_USER": "neo4j",
-        "RAIVEN_OLLAMA_HOST": "http://localhost:11434"
+        "RAIVEN_OLLAMA_HOST": "http://localhost:11434",
+        "RAIVEN_OLLAMA_MODEL": "embeddinggemma:latest"
       }
     }
   }
 }
 ```
 
-### Home Manager Configuration (for Package Installation)
+For Docker instead of Podman:
 
-To install the necessary packages via Home Manager:
-
-```nix
+```json
 {
-  services.raiven = {
-    enableContainerMCP = true;
-    package = inputs.raiven.packages.x86_64-linux.default;  # Replace with your system architecture
-    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
-    config = {
-      neo4j = {
-        uri = "bolt://localhost:7687";
-        user = "neo4j";
-        passwordFile = "/path/to/password/file";
-      };
-      ollama = {
-        host = "http://localhost:11434";
-      };
-    };
-  };
+  "mcpServers": {
+    "raiven": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "localhost/raiven-mcp:latest"],
+      "env": {
+        "RAIVEN_NEO4J_URI": "bolt://localhost:7687",
+        "RAIVEN_OLLAMA_HOST": "http://localhost:11434",
+        "RAIVEN_OLLAMA_MODEL": "embeddinggemma:latest"
+      }
+    }
+  }
 }
 ```
-
-**Note**: Replace `x86_64-linux` with your actual system architecture (e.g., `aarch64-linux`, `x86_64-darwin`, etc.).
-
-### Using Docker Instead of Podman
-
-To use Docker instead of the default Podman:
-
-```nix
-{
-  services.raiven = {
-    enableContainerMCP = true;
-    containerRuntime = "docker";
-    package = inputs.raiven.packages.x86_64-linux.default;
-    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
-    config = {
-      # ... your configuration
-    };
-  };
-}
-```
-
-### Testing with Systemd Service (Not Recommended for Production)
-
-⚠️ **Warning**: The systemd service approach is for testing only. It will create containers that exit immediately since MCP servers require client connections.
-
-If you still want to test with systemd (not recommended):
-
-```nix
-{ inputs, ... }: {
-  services.raiven = {
-    enableContainerMCP = true;
-    containerRuntime = "podman"; # Default, can be omitted
-    package = inputs.raiven.packages.x86_64-linux.default;
-    dockerImagePackage = inputs.raiven.packages.x86_64-linux.raiven-docker-image;
-
-    config = {
-      neo4j = {
-        uri = "bolt://neo4j-server:7687";
-        apiUrl = "http://neo4j-server:7474";
-        user = "neo4j";
-        passwordFile = "~/.local/share/raiven/neo4j-password";
-      };
-
-      ollama = {
-        host = "http://ollama-server:11434";
-        apiKeyFile = "~/.local/share/raiven/ollama-api-key";
-        model = {
-          name = "embeddinggemma:latest";
-          vectorDimensions = 768;
-        };
-      };
-    };
-  };
-
-  # Make sure to add the raiven package to your environment
-  home.packages = [ inputs.raiven.packages.x86_64-linux.default ];
-}
-```
-
-## How It Works
-
-1. When `enableContainerMCP` is set to `true`, the module creates a systemd user service named `raiven-container-mcp.service`.
-
-2. The service automatically loads the pre-built Docker image from the specified `dockerImagePackage`.
-
-3. The service runs the container with the proper environment variables configured based on your `services.raiven.config` settings.
-
-4. The containerized MCP server communicates via stdio, making it compatible with MCP clients like Roo Code.
-
-## Image Management
-
-The Docker image is built automatically as part of the Raiven package build process. The systemd service:
-
-- Checks if the `raiven-mcp:latest` image exists in the container runtime
-- If not found, loads the image from the Nix store using the pre-built image in the package's passthru attributes
-- Runs the container with proper environment configuration
-- Handles stdio communication required for MCP protocol
 
 ## Troubleshooting
-
-### Service Not Starting
-
-Check the service status:
-```bash
-systemctl --user status raiven-container-mcp
-```
-
-View logs for more details:
-```bash
-journalctl --user -u raiven-container-mcp -f
-```
 
 ### Image Loading Issues
 
 If the image fails to load, ensure that:
-1. The `dockerImagePackage` option is correctly set to the Raiven Docker image package
+1. The Docker image was built and loaded correctly
 2. The container runtime (Podman/Docker) is properly installed and accessible
 3. The user has permissions to run containers
 
 ### Configuration Issues
 
-Make sure all required configuration values (Neo4j URI, Ollama host, etc.) are properly set in `services.raiven.config`.
-
-## Migration from Previous Versions
-
-If you were previously using the non-containerized MCP server, you can simply switch by enabling `enableContainerMCP` and disabling the old service if it exists, though both can run simultaneously if needed.
+Make sure all required configuration values (Neo4j URI, Ollama host, etc.) are properly set in your MCP client configuration.
 
 ## Security Considerations
 
-- The container runs with minimal privileges as a user service
-- Sensitive information like passwords and API keys should be provided via files using the `*File` configuration options
+- The container runs with minimal privileges
+- Sensitive information like passwords and API keys should be provided via environment variables
 - The container doesn't expose network ports unnecessarily, communicating via stdio with the MCP client

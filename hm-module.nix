@@ -9,22 +9,9 @@ in {
   options.services.raiven = {
     enable = mkEnableOption "RAIVEN Holographic Cognitive Memory System";
 
-    enableContainerMCP = mkEnableOption "RAIVEN Containerized MCP Server";
-
-    containerRuntime = mkOption {
-      type = types.enum [ "podman" "docker" ];
-      default = "podman";
-      description = "Container runtime to use for the Raiven MCP server.";
-    };
-
     package = mkOption {
       type = types.package;
       description = "The RAIVEN package to use.";
-    };
-
-    dockerImagePackage = mkOption {
-      type = types.package;
-      description = "The RAIVEN Docker image package to use for containerized MCP.";
     };
 
     config = {
@@ -136,75 +123,44 @@ in {
       };
     };
 
-    systemd.user.services.raiven-container-mcp = mkIf cfg.enableContainerMCP {
+    # One-shot service to build and load the Docker image during activation
+    systemd.user.services.raiven-docker-setup = {
       Unit = {
-        Description = "RAIVEN Containerized MCP Server";
-        After = [ "network.target" ];
-        Requires = [ "${cfg.containerRuntime}.socket" ];
+        Description = "Build and load Raiven Docker image";
       };
 
-      Service = mkMerge [
-        {
-          Type = "exec";
-          Restart = "no";  # MCP servers should exit when done, not restart
-          WorkingDirectory = "${config.home.homeDirectory}";
-        }
-        (mkIf (cfg.containerRuntime == "podman") {
-          ExecStart = pkgs.writeShellScript "raiven-container-mcp-podman" ''
-            # Load the pre-built Docker image into podman
-            # Import the image from the nix store using the package's passthru
-            if ! ${pkgs.podman}/bin/podman image exists raiven-mcp:latest; then
-              echo "Loading raiven-mcp:latest image into podman..."
-              ${pkgs.podman}/bin/podman load -i ${cfg.dockerImagePackage} > /dev/null 2>&1 || {
-                echo "Failed to load Docker image"
-                exit 1
-              }
-            fi
-            
-            # Run the container with proper stdio forwarding
-            exec ${pkgs.podman}/bin/podman run -i --rm \
-              --env-file ${pkgs.writeText "raiven-env" ''
-                RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}
-                RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}
-                RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}
-                RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}
-                RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}
-                ${optionalString (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}"}
-                ${optionalString (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}"}
-                ${optionalString (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}"}
-                ${optionalString (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}"}
-              ''} \
-              raiven-mcp
-          '';
-        })
-        (mkIf (cfg.containerRuntime == "docker") {
-          ExecStart = pkgs.writeShellScript "raiven-container-mcp-docker" ''
-            # Load the pre-built Docker image if it doesn't exist
-            if ! ${pkgs.docker}/bin/docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^raiven-mcp:latest$"; then
-              echo "Loading raiven-mcp:latest image into docker..."
-              ${pkgs.docker}/bin/docker load < ${cfg.dockerImagePackage} > /dev/null 2>&1 || {
-                echo "Failed to load Docker image"
-                exit 1
-              }
-            fi
-            
-            # Run the container with proper stdio forwarding
-            exec ${pkgs.docker}/bin/docker run -i --rm \
-              --env-file ${pkgs.writeText "raiven-env" ''
-                RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}
-                RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}
-                RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}
-                RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}
-                RAIVEN_VECTOR_DIMENSIONS=${toString cfg.config.ollama.model.vectorDimensions}
-                ${optionalString (cfg.config.neo4j.apiUrl != null) "RAIVEN_NEO4J_API_URL=${cfg.config.neo4j.apiUrl}"}
-                ${optionalString (cfg.config.neo4j.passwordFile != null) "RAIVEN_NEO4J_PASSWORD_FILE=${toEnvValue cfg.config.neo4j.passwordFile}"}
-                ${optionalString (cfg.config.neo4j.apiKeyFile != null) "RAIVEN_NEO4J_API_KEY_FILE=${toEnvValue cfg.config.neo4j.apiKeyFile}"}
-                ${optionalString (cfg.config.ollama.apiKeyFile != null) "RAIVEN_OLLAMA_API_KEY_FILE=${toEnvValue cfg.config.ollama.apiKeyFile}"}
-              ''} \
-              raiven-mcp
-          '';
-        })
-      ];
+      Service = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeShellScript "raiven-docker-setup" ''
+          set -e
+
+          echo "Building Raiven MCP Docker image..."
+          # Always build the latest Docker image
+          nix build "${cfg.package.src}#raiven-docker-image" --out-link /tmp/raiven-docker-result
+
+          echo "Loading Raiven MCP image into container runtime..."
+          # Try podman first, then docker
+          if command -v podman >/dev/null 2>&1; then
+            # Remove old image if it exists
+            podman rmi raiven-mcp:latest 2>/dev/null || true
+            podman load < /tmp/raiven-docker-result
+            echo "Loaded image into podman"
+          elif command -v docker >/dev/null 2>&1; then
+            # Remove old image if it exists
+            docker rmi raiven-mcp:latest 2>/dev/null || true
+            docker load < /tmp/raiven-docker-result
+            echo "Loaded image into docker"
+          else
+            echo "Neither podman nor docker found, cannot load image"
+            exit 1
+          fi
+
+          # Clean up
+          rm -f /tmp/raiven-docker-result
+          echo "Raiven MCP Docker setup complete"
+        '';
+        RemainAfterExit = true;
+      };
 
       Install = {
         WantedBy = [ "default.target" ];
