@@ -239,25 +239,19 @@ in {
             "run"
             "-i"
             "--rm"
+            "-v" "${config.home.homeDirectory}/.config/sops-nix/secrets:/secrets:ro"
             "-e" "RAIVEN_NEO4J_URI=${cfg.config.neo4j.uri}"
             "-e" "RAIVEN_NEO4J_USER=${cfg.config.neo4j.user}"
+            "-e" "RAIVEN_NEO4J_PASSWORD_FILE=/secrets/server1os1-neo4j-password"
+            "-e" "RAIVEN_NEO4J_API_KEY_FILE=/secrets/server1os1-neo4j-api-key"
             "-e" "RAIVEN_OLLAMA_HOST=${cfg.config.ollama.host}"
+            "-e" "RAIVEN_OLLAMA_API_KEY_FILE=/secrets/server1os1-ollama-api-key"
             "-e" "RAIVEN_OLLAMA_MODEL=${cfg.config.ollama.model.name}"
             "localhost/raiven-mcp:latest"
           ];
           env = {
-            "RAIVEN_NEO4J_URI" = cfg.config.neo4j.uri;
-            "RAIVEN_NEO4J_USER" = cfg.config.neo4j.user;
-            "RAIVEN_OLLAMA_HOST" = cfg.config.ollama.host;
-            "RAIVEN_OLLAMA_MODEL" = cfg.config.ollama.model.name;
             "RAIVEN_VECTOR_DIMENSIONS" = toString cfg.config.ollama.model.vectorDimensions;
-          } // (optionalAttrs (cfg.config.neo4j.passwordFile != null) {
-            "RAIVEN_NEO4J_PASSWORD_FILE" = toEnvValue cfg.config.neo4j.passwordFile;
-          }) // (optionalAttrs (cfg.config.neo4j.apiKeyFile != null) {
-            "RAIVEN_NEO4J_API_KEY_FILE" = toEnvValue cfg.config.neo4j.apiKeyFile;
-          }) // (optionalAttrs (cfg.config.ollama.apiKeyFile != null) {
-            "RAIVEN_OLLAMA_API_KEY_FILE" = toEnvValue cfg.config.ollama.apiKeyFile;
-          });
+          };
           disabled = false;
           alwaysAllow = [];
           disabledTools = [];
