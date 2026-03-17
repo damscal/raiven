@@ -190,7 +190,7 @@ in {
             # Remove exited containers from raiven-mcp image
             podman rm $(podman ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter status=exited 2>/dev/null) 2>/dev/null || true
             # Remove containers that have been running for more than 1 hour (likely orphaned)
-            podman rm $(podman ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}} {{.Created}}" | awk '$2 < "'$(date -d '1 hour ago' +%s)'" {print $1}' 2>/dev/null) 2>/dev/null || true
+            podman rm $(podman ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}}\t{{.Created}}" | awk -F'\t' '{ cleaned=$2; sub(/\.[0-9]+/, "", cleaned); sub(/ [A-Z]{3}$/, "", cleaned); cmd="date -d \""cleaned"\" +%s 2>/dev/null"; cmd | getline ts; close(cmd); if (ts > 0 && ts < '"$(date -d '1 hour ago' +%s)"') print $1 }' 2>/dev/null) 2>/dev/null || true
           fi
 
           # Clean up docker containers
@@ -198,7 +198,7 @@ in {
             # Remove exited containers from raiven-mcp image
             docker rm $(docker ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter status=exited 2>/dev/null) 2>/dev/null || true
             # Remove containers that have been running for more than 1 hour (likely orphaned)
-            docker rm $(docker ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}} {{.CreatedAt}}" | awk '$2 < "'$(date -d '1 hour ago' +%s)'" {print $1}' 2>/dev/null) 2>/dev/null || true
+            docker rm $(docker ps -a -q --filter ancestor=localhost/raiven-mcp:latest --filter "status=running" --format "{{.ID}}\t{{.CreatedAt}}" | awk -F'\t' '{ cleaned=$2; sub(/\.[0-9]+/, "", cleaned); sub(/ [A-Z]{3}$/, "", cleaned); cmd="date -d \""cleaned"\" +%s 2>/dev/null"; cmd | getline ts; close(cmd); if (ts > 0 && ts < '"$(date -d '1 hour ago' +%s)"') print $1 }' 2>/dev/null) 2>/dev/null || true
           fi
 
           echo "Raiven MCP container cleanup complete"
