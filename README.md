@@ -1,3 +1,5 @@
+> In Norse mythology, Odin, the chief god, had two ravens, Huginn (thought) and Muninn (memory), who flew around the world and brought back information to him.
+
 # RAIVEN: Holographic Cognitive Memory System (HCMS)
 
 RAIVEN is a Nix-flaked Python application that implements a Holographic Cognitive Memory System (HCMS). It provides a GraphRAG + RAPTOR architecture for long-term, structured, and abstractive memory for Large Language Models (LLMs), using Neo4j as the graph-vector database and Ollama for embeddings.
